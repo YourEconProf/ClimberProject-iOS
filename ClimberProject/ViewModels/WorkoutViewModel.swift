@@ -95,16 +95,25 @@ class WorkoutViewModel: ObservableObject {
     isLoading = true
     defer { isLoading = false }
     do {
-      let response = try await supabase
+      // Fetch workouts that have either a name (athlete) or template_name (template)
+      let byName = try await supabase
         .from("workouts")
         .select(workoutSelectWithNesting)
         .not("name", operator: .is, value: "null")
-        .order("name", ascending: true)
+        .execute()
+      let byTemplateName = try await supabase
+        .from("workouts")
+        .select(workoutSelectWithNesting)
+        .not("template_name", operator: .is, value: "null")
         .execute()
       do {
-        namedWorkouts = try decoder.decode([Workout].self, from: response.data)
+        let named = try decoder.decode([Workout].self, from: byName.data)
+        let templates = try decoder.decode([Workout].self, from: byTemplateName.data)
+        var combined = named + templates.filter { t in !named.contains(where: { $0.id == t.id }) }
+        combined.sort { $0.displayTitle < $1.displayTitle }
+        namedWorkouts = combined
       } catch {
-        let raw = String(data: response.data, encoding: .utf8) ?? "<non-utf8>"
+        let raw = String(data: byName.data, encoding: .utf8) ?? "<non-utf8>"
         print("[Workouts] named decode error: \(error)")
         print("[Workouts] named raw JSON: \(raw)")
       }
@@ -160,8 +169,8 @@ class WorkoutViewModel: ObservableObject {
     do {
       let rows: [NameRow] = try await supabase
         .from("workouts")
-        .select("id, name")
-        .ilike("name", value: trimmed)
+        .select("id, template_name")
+        .ilike("template_name", value: trimmed)
         .execute()
         .value
       return rows.contains { $0.id != excludingId }
@@ -183,12 +192,15 @@ class WorkoutViewModel: ObservableObject {
     notes: String?,
     sets: [DraftSet]
   ) async throws -> Workout {
+    let isTemplate = athleteId == nil && gymId != nil
+    let resolvedName = name?.isEmpty == true ? nil : name
     let insert = WorkoutInsert(
       athleteId: athleteId,
       coachId: coachId,
       gymId: gymId,
       workoutDate: date,
-      name: name?.isEmpty == true ? nil : name,
+      name: isTemplate ? nil : resolvedName,
+      templateName: isTemplate ? resolvedName : nil,
       notes: notes?.isEmpty == true ? nil : notes
     )
     let created: InsertedWorkout = try await supabase
@@ -205,9 +217,9 @@ class WorkoutViewModel: ObservableObject {
       workouts.insert(full, at: 0)
       workouts.sort { $0.workoutDate > $1.workoutDate }
     }
-    if full.name != nil {
+    if full.name != nil || full.templateName != nil {
       namedWorkouts.append(full)
-      namedWorkouts.sort { ($0.name ?? "") < ($1.name ?? "") }
+      namedWorkouts.sort { $0.displayTitle < $1.displayTitle }
     }
     return full
   }
@@ -221,9 +233,12 @@ class WorkoutViewModel: ObservableObject {
     notes: String?,
     sets: [DraftSet]
   ) async throws {
+    let isTemplate = workout.athleteId == nil && workout.gymId != nil
+    let resolvedName = name?.isEmpty == true ? nil : name
     let update = WorkoutUpdate(
       workoutDate: date,
-      name: name?.isEmpty == true ? nil : name,
+      name: isTemplate ? nil : resolvedName,
+      templateName: isTemplate ? resolvedName : nil,
       notes: notes?.isEmpty == true ? nil : notes
     )
     try await supabase
@@ -245,14 +260,15 @@ class WorkoutViewModel: ObservableObject {
       workouts[idx] = full
     }
     if let idx = namedWorkouts.firstIndex(where: { $0.id == workout.id }) {
-      if full.name == nil {
+      if full.name == nil && full.templateName == nil {
         namedWorkouts.remove(at: idx)
       } else {
         namedWorkouts[idx] = full
+        namedWorkouts.sort { $0.displayTitle < $1.displayTitle }
       }
-    } else if full.name != nil {
+    } else if full.name != nil || full.templateName != nil {
       namedWorkouts.append(full)
-      namedWorkouts.sort { ($0.name ?? "") < ($1.name ?? "") }
+      namedWorkouts.sort { $0.displayTitle < $1.displayTitle }
     }
   }
 
@@ -500,6 +516,7 @@ private struct WorkoutInsert: Encodable {
   let gymId: String?
   let workoutDate: String
   let name: String?
+  let templateName: String?
   let notes: String?
 
   enum CodingKeys: String, CodingKey {
@@ -507,18 +524,23 @@ private struct WorkoutInsert: Encodable {
     case coachId = "coach_id"
     case gymId = "gym_id"
     case workoutDate = "workout_date"
-    case name, notes
+    case name
+    case templateName = "template_name"
+    case notes
   }
 }
 
 private struct WorkoutUpdate: Encodable {
   let workoutDate: String
   let name: String?
+  let templateName: String?
   let notes: String?
 
   enum CodingKeys: String, CodingKey {
     case workoutDate = "workout_date"
-    case name, notes
+    case name
+    case templateName = "template_name"
+    case notes
   }
 }
 
@@ -597,5 +619,8 @@ private struct SetTypeInsert: Encodable {
 
 private struct NameRow: Decodable {
   let id: String
-  let name: String?
+  let templateName: String?
+  enum CodingKeys: String, CodingKey {
+    case id; case templateName = "template_name"
+  }
 }

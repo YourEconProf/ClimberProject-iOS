@@ -103,7 +103,7 @@ private struct WorkoutRow: View {
           HStack(spacing: 6) {
             Text(workout.workoutDate)
               .font(.subheadline).bold()
-            if let name = workout.name {
+            if let name = workout.name ?? workout.templateName {
               Text(": \(name)")
                 .font(.subheadline)
                 .foregroundColor(.secondary)

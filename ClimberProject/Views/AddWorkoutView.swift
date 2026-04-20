@@ -208,7 +208,7 @@ struct AddWorkoutView: View {
   private func bootstrap() {
     guard let w = editing else { return }
     if let d = dateFmt.date(from: w.workoutDate) { date = d }
-    name = w.name ?? ""
+    name = w.templateName ?? w.name ?? ""
     notes = w.notes ?? ""
     sets = w.sortedSets.map { s in
       let rc = s.effectiveRoundsCount
@@ -252,8 +252,9 @@ struct AddWorkoutView: View {
       )
     }
     if let tNotes = template.notes, notes.isEmpty { notes = tNotes }
-    templateAppliedFrom = template.name
-    name = template.name ?? ""
+    let tName = template.templateName ?? template.name
+    templateAppliedFrom = tName
+    name = tName ?? ""
     showingTemplateSuggestions = false
     nameIsTaken = false
   }

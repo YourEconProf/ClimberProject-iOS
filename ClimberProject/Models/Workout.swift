@@ -7,6 +7,7 @@ struct Workout: Codable, Identifiable {
   let gymId: String?
   let workoutDate: String
   let name: String?
+  let templateName: String?
   let notes: String?
   var sets: [WorkoutSet]?
   var coach: EmbeddedCoach?
@@ -19,6 +20,7 @@ struct Workout: Codable, Identifiable {
     case gymId = "gym_id"
     case workoutDate = "workout_date"
     case name
+    case templateName = "template_name"
     case notes
     case sets = "workout_sets"
     case coach = "coaches"
@@ -38,7 +40,7 @@ struct Workout: Codable, Identifiable {
   }
 
   var displayTitle: String {
-    name ?? (athlete?.displayName ?? (isTemplate ? "Workout Template" : "Workout"))
+    templateName ?? name ?? (athlete?.displayName ?? (isTemplate ? "Workout Template" : "Workout"))
   }
 }
 
