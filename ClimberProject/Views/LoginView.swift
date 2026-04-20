@@ -4,7 +4,6 @@ struct LoginView: View {
   @EnvironmentObject var authVM: AuthViewModel
   @State private var email = ""
   @State private var password = ""
-  @State private var isLoading = false
 
   var body: some View {
     NavigationStack {
@@ -21,7 +20,7 @@ struct LoginView: View {
           TextField("Email", text: $email)
             .textContentType(.emailAddress)
             .keyboardType(.emailAddress)
-            .autocapitalization(.none)
+            .textInputAutocapitalization(.never)
             .padding(12)
             .background(Color(.systemGray6))
             .cornerRadius(8)
@@ -34,7 +33,7 @@ struct LoginView: View {
         }
 
         Button(action: { Task { await login() } }) {
-          if isLoading {
+          if authVM.isLoading {
             ProgressView()
               .tint(.white)
           } else {
@@ -46,7 +45,7 @@ struct LoginView: View {
         .foregroundColor(.white)
         .background(Color.blue)
         .cornerRadius(8)
-        .disabled(isLoading)
+        .disabled(authVM.isLoading)
 
         if let error = authVM.error {
           Text(error)
@@ -67,9 +66,7 @@ struct LoginView: View {
   }
 
   private func login() async {
-    isLoading = true
     await authVM.login(email: email, password: password)
-    isLoading = false
   }
 }
 
