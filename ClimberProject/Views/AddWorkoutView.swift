@@ -192,6 +192,14 @@ struct AddWorkoutView: View {
         }
       }
       .onAppear(perform: bootstrap)
+      .task {
+        if vm.setTypes.isEmpty {
+          await vm.fetchSetTypes(gymId: gymId)
+        }
+        if vm.exercises.isEmpty {
+          await vm.fetchExercises(gymId: gymId)
+        }
+      }
     }
   }
 
