@@ -25,6 +25,7 @@ struct AthleteWorkoutHistoryView: View {
           ForEach(vm.workouts) { workout in
             WorkoutRow(
               workout: workout,
+              athleteName: athlete.displayName,
               isExpanded: expanded.contains(workout.id),
               onToggle: { toggle(workout.id) },
               onEdit: { editingWorkout = workout },
@@ -91,10 +92,13 @@ struct AthleteWorkoutHistoryView: View {
 
 private struct WorkoutRow: View {
   let workout: Workout
+  let athleteName: String
   let isExpanded: Bool
   let onToggle: () -> Void
   let onEdit: () -> Void
   let onQuickNote: () -> Void
+
+  @State private var shareURL: IdentifiableURL?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -127,6 +131,10 @@ private struct WorkoutRow: View {
         .buttonStyle(.borderless)
         Button(action: onEdit) {
           Image(systemName: "pencil").foregroundColor(.accentColor)
+        }
+        .buttonStyle(.borderless)
+        Button { sharePDF() } label: {
+          Image(systemName: "square.and.arrow.up").foregroundColor(.accentColor)
         }
         .buttonStyle(.borderless)
         Button(action: onToggle) {
@@ -203,6 +211,16 @@ private struct WorkoutRow: View {
       }
     }
     .padding(.vertical, 4)
+    .sheet(item: $shareURL) { item in
+      ShareSheet(items: [item.url])
+    }
+  }
+
+  @MainActor
+  private func sharePDF() {
+    if let url = WorkoutPDFRenderer.renderPDF(workout, athleteName: athleteName) {
+      shareURL = IdentifiableURL(url: url)
+    }
   }
 }
 
