@@ -23,7 +23,11 @@ struct SettingsView: View {
   @StateObject private var workoutVM = WorkoutViewModel()
   @State private var newSetTypeName = ""
   @State private var newExerciseName = ""
-  @State private var addError: String?
+  @State private var setTypeError: String?
+  @State private var exerciseError: String?
+  @FocusState private var focusedField: Field?
+
+  private enum Field { case setType, exercise }
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -69,16 +73,22 @@ struct SettingsView: View {
               for i in indices {
                 let id = setTypeVM.setTypes[i].id
                 do { try await setTypeVM.delete(id: id) }
-                catch { addError = error.localizedDescription }
+                catch { setTypeError = error.localizedDescription }
               }
             }
           }
           HStack {
             TextField("Add set type…", text: $newSetTypeName)
+              .focused($focusedField, equals: .setType)
+              .submitLabel(.done)
+              .onSubmit { Task { await addSetType() } }
             Button("Add") {
               Task { await addSetType() }
             }
             .disabled(newSetTypeName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+          if let setTypeError {
+            Text(setTypeError).foregroundColor(.red).font(.caption)
           }
         }
 
@@ -92,21 +102,23 @@ struct SettingsView: View {
               for i in indices {
                 let id = workoutVM.exercises[i].id
                 do { try await workoutVM.deleteExercise(id: id) }
-                catch { addError = error.localizedDescription }
+                catch { exerciseError = error.localizedDescription }
               }
             }
           }
           HStack {
             TextField("Add exercise…", text: $newExerciseName)
+              .focused($focusedField, equals: .exercise)
+              .submitLabel(.done)
+              .onSubmit { Task { await addExercise() } }
             Button("Add") {
               Task { await addExercise() }
             }
             .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
           }
-        }
-
-        if let addError {
-          Section { Text(addError).foregroundColor(.red).font(.caption) }
+          if let exerciseError {
+            Text(exerciseError).foregroundColor(.red).font(.caption)
+          }
         }
 
         // Appearance
@@ -133,6 +145,12 @@ struct SettingsView: View {
         }
       }
       .navigationTitle("Settings")
+      .toolbar {
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("Done") { focusedField = nil }
+        }
+      }
       .task {
         await loadGym()
         if let gymId = authVM.currentCoach?.gymId {
@@ -145,23 +163,29 @@ struct SettingsView: View {
 
   private func addSetType() async {
     guard let gymId = authVM.currentCoach?.gymId else { return }
-    addError = nil
+    let trimmed = newSetTypeName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    setTypeError = nil
     do {
-      try await setTypeVM.add(gymId: gymId, name: newSetTypeName)
+      try await setTypeVM.add(gymId: gymId, name: trimmed)
       newSetTypeName = ""
+      focusedField = nil
     } catch {
-      addError = error.localizedDescription
+      setTypeError = error.localizedDescription
     }
   }
 
   private func addExercise() async {
     guard let gymId = authVM.currentCoach?.gymId else { return }
-    addError = nil
+    let trimmed = newExerciseName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    exerciseError = nil
     do {
-      _ = try await workoutVM.addExercise(gymId: gymId, name: newExerciseName)
+      _ = try await workoutVM.addExercise(gymId: gymId, name: trimmed)
       newExerciseName = ""
+      focusedField = nil
     } catch {
-      addError = error.localizedDescription
+      exerciseError = error.localizedDescription
     }
   }
 
