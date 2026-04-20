@@ -9,7 +9,7 @@ struct WorkoutPreviewView: View {
   @Environment(\.dismiss) private var dismiss
 
   @State private var editing: Workout?
-  @State private var shareURL: URL?
+  @State private var shareURL: IdentifiableURL?
 
   private var editMode: WorkoutFormMode {
     if let aid = workout.athleteId { return .athlete(id: aid) }
@@ -117,8 +117,8 @@ struct WorkoutPreviewView: View {
           editing: w
         )
       }
-      .sheet(item: $shareURL) { url in
-        ShareSheet(items: [url])
+      .sheet(item: $shareURL) { item in
+        ShareSheet(items: [item.url])
       }
     }
   }
@@ -126,13 +126,14 @@ struct WorkoutPreviewView: View {
   private func sharePDF() {
     let athleteName = workout.athlete?.displayName
     if let url = WorkoutPDFRenderer.renderPDF(workout, athleteName: athleteName) {
-      shareURL = url
+      shareURL = IdentifiableURL(url: url)
     }
   }
 }
 
-extension URL: Identifiable {
-  public var id: String { absoluteString }
+struct IdentifiableURL: Identifiable {
+  let id = UUID()
+  let url: URL
 }
 
 struct ShareSheet: UIViewControllerRepresentable {

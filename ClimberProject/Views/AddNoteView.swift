@@ -39,7 +39,7 @@ struct AddNoteView: View {
               Label("Photo Library", systemImage: "photo")
                 .font(.caption)
             }
-            .onChange(of: photoItem) { item in
+            .onChange(of: photoItem) { _, item in
               guard let item else { return }
               Task { await processPickedPhoto(item) }
             }
@@ -83,7 +83,7 @@ struct AddNoteView: View {
         CameraView(image: $cameraImage)
           .ignoresSafeArea()
       }
-      .onChange(of: cameraImage) { image in
+      .onChange(of: cameraImage) { _, image in
         guard let image else { return }
         Task { await processImage(image) }
       }
