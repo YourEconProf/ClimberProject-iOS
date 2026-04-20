@@ -7,6 +7,7 @@ struct WorkoutsLibraryView: View {
   @State private var previewing: Workout?
   @State private var copying: Workout?
   @State private var creatingTemplate = false
+  @State private var expanded: Set<String> = []
   @State private var search: String = ""
 
   var filtered: [Workout] {
@@ -30,12 +31,13 @@ struct WorkoutsLibraryView: View {
         } else {
           List {
             ForEach(filtered) { w in
-              Button {
-                previewing = w
-              } label: {
-                LibraryCard(workout: w, onCopy: { copying = w })
-              }
-              .buttonStyle(.plain)
+              LibraryCard(
+                workout: w,
+                isExpanded: expanded.contains(w.id),
+                onToggle: { toggle(w.id) },
+                onPreview: { previewing = w },
+                onCopy: { copying = w }
+              )
               .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
                   Task { try? await vm.deleteWorkout(id: w.id) }
@@ -95,48 +97,69 @@ struct WorkoutsLibraryView: View {
 
 private struct LibraryCard: View {
   let workout: Workout
+  let isExpanded: Bool
+  let onToggle: () -> Void
+  let onPreview: () -> Void
   let onCopy: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Text(workout.name ?? "—").font(.headline)
-        if workout.athleteId == nil {
-          Text("Template")
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.accentColor.opacity(0.15))
-            .foregroundColor(.accentColor)
-            .clipShape(Capsule())
+      HStack(alignment: .top) {
+        Button(action: onPreview) {
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(workout.name ?? "—").font(.headline).foregroundColor(.primary)
+              if workout.athleteId == nil {
+                Text("Template")
+                  .font(.caption2)
+                  .padding(.horizontal, 6)
+                  .padding(.vertical, 2)
+                  .background(Color.accentColor.opacity(0.15))
+                  .foregroundColor(.accentColor)
+                  .clipShape(Capsule())
+              }
+            }
+            if let athlete = workout.athlete {
+              Text("From: \(athlete.displayName)")
+                .font(.caption).foregroundColor(.secondary)
+            }
+            Text("\(workout.sortedSets.count) sets • \(workout.totalExerciseCount) exercises")
+              .font(.caption).foregroundColor(.secondary)
+          }
         }
+        .buttonStyle(.plain)
         Spacer()
         Button(action: onCopy) {
-          Label("Copy", systemImage: "doc.on.doc")
-            .labelStyle(.iconOnly)
+          Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        Button(action: onToggle) {
+          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .foregroundColor(.secondary)
         }
         .buttonStyle(.borderless)
       }
-      if let athlete = workout.athlete {
-        Text("From: \(athlete.displayName)")
-          .font(.caption)
-          .foregroundColor(.secondary)
-      }
-      Text("\(workout.sortedSets.count) sets • \(workout.totalExerciseCount) exercises")
-        .font(.caption)
-        .foregroundColor(.secondary)
-      ForEach(Array(workout.sortedSets.enumerated()), id: \.element.id) { idx, s in
-        LibrarySetRow(index: idx, set: s)
-      }
-      if let notes = workout.notes, !notes.isEmpty {
-        Text(notes)
-          .font(.caption)
-          .foregroundColor(.secondary)
-          .lineLimit(3)
-          .padding(.top, 2)
+
+      if isExpanded {
+        Divider()
+        ForEach(Array(workout.sortedSets.enumerated()), id: \.element.id) { idx, s in
+          LibrarySetRow(index: idx, set: s)
+        }
+        if let notes = workout.notes, !notes.isEmpty {
+          Text(notes)
+            .font(.caption).foregroundColor(.secondary)
+            .lineLimit(3)
+            .padding(.top, 2)
+        }
       }
     }
     .padding(.vertical, 4)
+  }
+}
+
+extension WorkoutsLibraryView {
+  fileprivate func toggle(_ id: String) {
+    if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
   }
 }
 

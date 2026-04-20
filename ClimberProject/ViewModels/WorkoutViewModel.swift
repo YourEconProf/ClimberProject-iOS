@@ -343,12 +343,20 @@ class WorkoutViewModel: ObservableObject {
   }
 
   func deleteExercise(id: String) async throws {
-    try await supabase
-      .from("exercises")
-      .delete()
-      .eq("id", value: id)
-      .execute()
-    exercises.removeAll { $0.id == id }
+    do {
+      try await supabase
+        .from("exercises")
+        .delete()
+        .eq("id", value: id)
+        .execute()
+      exercises.removeAll { $0.id == id }
+    } catch {
+      let msg = "\(error)".lowercased()
+      if msg.contains("23503") || msg.contains("foreign key") {
+        throw WorkoutVMError.exerciseInUse
+      }
+      throw error
+    }
   }
 
   // MARK: - Set type library mgmt
@@ -472,11 +480,13 @@ class WorkoutViewModel: ObservableObject {
 
 enum WorkoutVMError: LocalizedError {
   case setTypeInUse
+  case exerciseInUse
   case nameTaken
 
   var errorDescription: String? {
     switch self {
     case .setTypeInUse: return "This set type is used by existing workouts and can't be deleted."
+    case .exerciseInUse: return "This exercise is used by existing workouts and can't be deleted."
     case .nameTaken: return "A workout with that name already exists."
     }
   }
