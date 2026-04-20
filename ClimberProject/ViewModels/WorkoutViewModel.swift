@@ -161,7 +161,7 @@ class WorkoutViewModel: ObservableObject {
       let rows: [NameRow] = try await supabase
         .from("workouts")
         .select("id, name")
-        .eq("name", value: trimmed)
+        .ilike("name", value: trimmed)
         .execute()
         .value
       return rows.contains { $0.id != excludingId }
