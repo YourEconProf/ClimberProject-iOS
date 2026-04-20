@@ -285,16 +285,16 @@ class WorkoutViewModel: ObservableObject {
       let w = workouts[idx]
       workouts[idx] = Workout(
         id: w.id, athleteId: w.athleteId, coachId: w.coachId, gymId: w.gymId,
-        workoutDate: w.workoutDate, name: w.name, notes: patch.notes,
-        sets: w.sets, coach: w.coach, athlete: w.athlete
+        workoutDate: w.workoutDate, name: w.name, templateName: w.templateName,
+        notes: patch.notes, sets: w.sets, coach: w.coach, athlete: w.athlete
       )
     }
     if let idx = namedWorkouts.firstIndex(where: { $0.id == id }) {
       let w = namedWorkouts[idx]
       namedWorkouts[idx] = Workout(
         id: w.id, athleteId: w.athleteId, coachId: w.coachId, gymId: w.gymId,
-        workoutDate: w.workoutDate, name: w.name, notes: patch.notes,
-        sets: w.sets, coach: w.coach, athlete: w.athlete
+        workoutDate: w.workoutDate, name: w.name, templateName: w.templateName,
+        notes: patch.notes, sets: w.sets, coach: w.coach, athlete: w.athlete
       )
     }
   }
