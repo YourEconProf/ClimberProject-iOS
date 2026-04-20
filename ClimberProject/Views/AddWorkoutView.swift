@@ -252,9 +252,8 @@ struct AddWorkoutView: View {
       )
     }
     if let tNotes = template.notes, notes.isEmpty { notes = tNotes }
-    // Clear the name field so the new workout starts unnamed (avoids uniqueness conflict).
     templateAppliedFrom = template.name
-    name = ""
+    name = template.name ?? ""
     showingTemplateSuggestions = false
     nameIsTaken = false
   }
