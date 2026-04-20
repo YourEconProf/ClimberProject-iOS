@@ -2,8 +2,9 @@ import Foundation
 
 struct Workout: Codable, Identifiable {
   let id: String
-  let athleteId: String
+  let athleteId: String?
   let coachId: String
+  let gymId: String?
   let workoutDate: String
   let name: String?
   let notes: String?
@@ -15,6 +16,7 @@ struct Workout: Codable, Identifiable {
     case id
     case athleteId = "athlete_id"
     case coachId = "coach_id"
+    case gymId = "gym_id"
     case workoutDate = "workout_date"
     case name
     case notes
@@ -29,6 +31,14 @@ struct Workout: Codable, Identifiable {
 
   var totalExerciseCount: Int {
     sortedSets.reduce(0) { $0 + ($1.exercises?.count ?? 0) }
+  }
+
+  var isTemplate: Bool {
+    athleteId == nil && gymId != nil
+  }
+
+  var displayTitle: String {
+    name ?? (athlete?.displayName ?? (isTemplate ? "Workout Template" : "Workout"))
   }
 }
 

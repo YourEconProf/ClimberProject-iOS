@@ -19,6 +19,11 @@ struct SettingsView: View {
   @EnvironmentObject var authVM: AuthViewModel
   @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
   @State private var gym: Gym?
+  @StateObject private var setTypeVM = SetTypeViewModel()
+  @StateObject private var workoutVM = WorkoutViewModel()
+  @State private var newSetTypeName = ""
+  @State private var newExerciseName = ""
+  @State private var addError: String?
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -54,6 +59,56 @@ struct SettingsView: View {
           }
         }
 
+        // Set Types
+        Section("Set Types") {
+          ForEach(setTypeVM.setTypes) { st in
+            Text(st.name)
+          }
+          .onDelete { indices in
+            Task {
+              for i in indices {
+                let id = setTypeVM.setTypes[i].id
+                do { try await setTypeVM.delete(id: id) }
+                catch { addError = error.localizedDescription }
+              }
+            }
+          }
+          HStack {
+            TextField("Add set type…", text: $newSetTypeName)
+            Button("Add") {
+              Task { await addSetType() }
+            }
+            .disabled(newSetTypeName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+        }
+
+        // Exercises
+        Section("Exercises") {
+          ForEach(workoutVM.exercises) { ex in
+            Text(ex.name)
+          }
+          .onDelete { indices in
+            Task {
+              for i in indices {
+                let id = workoutVM.exercises[i].id
+                do { try await workoutVM.deleteExercise(id: id) }
+                catch { addError = error.localizedDescription }
+              }
+            }
+          }
+          HStack {
+            TextField("Add exercise…", text: $newExerciseName)
+            Button("Add") {
+              Task { await addExercise() }
+            }
+            .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+        }
+
+        if let addError {
+          Section { Text(addError).foregroundColor(.red).font(.caption) }
+        }
+
         // Appearance
         Section("Appearance") {
           Picker("Mode", selection: $appearanceMode) {
@@ -78,7 +133,35 @@ struct SettingsView: View {
         }
       }
       .navigationTitle("Settings")
-      .task { await loadGym() }
+      .task {
+        await loadGym()
+        if let gymId = authVM.currentCoach?.gymId {
+          await setTypeVM.fetch(gymId: gymId)
+          await workoutVM.fetchExercises(gymId: gymId)
+        }
+      }
+    }
+  }
+
+  private func addSetType() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    addError = nil
+    do {
+      try await setTypeVM.add(gymId: gymId, name: newSetTypeName)
+      newSetTypeName = ""
+    } catch {
+      addError = error.localizedDescription
+    }
+  }
+
+  private func addExercise() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    addError = nil
+    do {
+      _ = try await workoutVM.addExercise(gymId: gymId, name: newExerciseName)
+      newExerciseName = ""
+    } catch {
+      addError = error.localizedDescription
     }
   }
 

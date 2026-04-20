@@ -4,8 +4,9 @@ struct WorkoutsLibraryView: View {
   @StateObject private var vm = WorkoutViewModel()
   @EnvironmentObject var authVM: AuthViewModel
 
-  @State private var editing: Workout?
+  @State private var previewing: Workout?
   @State private var copying: Workout?
+  @State private var creatingTemplate = false
   @State private var search: String = ""
 
   var filtered: [Workout] {
@@ -29,23 +30,33 @@ struct WorkoutsLibraryView: View {
         } else {
           List {
             ForEach(filtered) { w in
-              LibraryCard(workout: w, onEdit: { editing = w }, onCopy: { copying = w })
-                .swipeActions(edge: .trailing) {
-                  Button(role: .destructive) {
-                    Task { try? await vm.deleteWorkout(id: w.id) }
-                  } label: { Label("Delete", systemImage: "trash") }
-                }
+              Button {
+                previewing = w
+              } label: {
+                LibraryCard(workout: w, onCopy: { copying = w })
+              }
+              .buttonStyle(.plain)
+              .swipeActions(edge: .trailing) {
+                Button(role: .destructive) {
+                  Task { try? await vm.deleteWorkout(id: w.id) }
+                } label: { Label("Delete", systemImage: "trash") }
+              }
             }
           }
           .overlay {
             if vm.namedWorkouts.isEmpty {
               ContentUnavailableView("No Named Workouts", systemImage: "dumbbell",
-                description: Text("Create a workout on an athlete and give it a name to add it to the library."))
+                description: Text("Create a workout template with the + button, or name a workout on an athlete."))
             }
           }
         }
       }
       .navigationTitle("Workouts")
+      .toolbar {
+        ToolbarItem(placement: .primaryAction) {
+          Button { creatingTemplate = true } label: { Image(systemName: "plus") }
+        }
+      }
       .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
       .task {
         await vm.fetchNamedWorkouts()
@@ -54,13 +65,23 @@ struct WorkoutsLibraryView: View {
         }
       }
       .refreshable { await vm.fetchNamedWorkouts() }
-      .sheet(item: $editing) { workout in
+      .sheet(item: $previewing) { workout in
+        WorkoutPreviewView(
+          vm: vm,
+          workout: workout,
+          onCopy: {
+            previewing = nil
+            copying = workout
+          }
+        )
+      }
+      .sheet(isPresented: $creatingTemplate) {
         AddWorkoutView(
           vm: vm,
-          athleteId: workout.athleteId,
+          mode: .template(gymId: authVM.currentCoach?.gymId ?? ""),
           coachId: authVM.currentCoach?.id ?? "",
           gymId: authVM.currentCoach?.gymId ?? "",
-          editing: workout
+          editing: nil
         )
       }
       .sheet(item: $copying) { workout in
@@ -74,21 +95,25 @@ struct WorkoutsLibraryView: View {
 
 private struct LibraryCard: View {
   let workout: Workout
-  let onEdit: () -> Void
   let onCopy: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text(workout.name ?? "—").font(.headline)
+        if workout.athleteId == nil {
+          Text("Template")
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.15))
+            .foregroundColor(.accentColor)
+            .clipShape(Capsule())
+        }
         Spacer()
         Button(action: onCopy) {
           Label("Copy", systemImage: "doc.on.doc")
             .labelStyle(.iconOnly)
-        }
-        .buttonStyle(.borderless)
-        Button(action: onEdit) {
-          Image(systemName: "pencil")
         }
         .buttonStyle(.borderless)
       }
@@ -100,29 +125,8 @@ private struct LibraryCard: View {
       Text("\(workout.sortedSets.count) sets • \(workout.totalExerciseCount) exercises")
         .font(.caption)
         .foregroundColor(.secondary)
-      ForEach(workout.sortedSets) { s in
-        VStack(alignment: .leading, spacing: 2) {
-          HStack {
-            Text("Set \((workout.sortedSets.firstIndex(where: { $0.id == s.id }) ?? 0) + 1)")
-              .font(.caption2).bold()
-            if let r = s.repeatCount, r > 1 {
-              Text("×\(r)").font(.caption2).foregroundColor(.secondary)
-            }
-          }
-          ForEach(s.sortedExercises) { ex in
-            HStack {
-              Text("• \(ex.displayName)").font(.caption2)
-              Spacer()
-              if let d = ex.difficulty, !d.isEmpty {
-                Text(d).font(.caption2).foregroundColor(.secondary)
-              }
-              if let r = ex.reps, !r.isEmpty {
-                Text("\(r) reps").font(.caption2).foregroundColor(.secondary)
-              }
-            }
-          }
-        }
-        .padding(.vertical, 1)
+      ForEach(Array(workout.sortedSets.enumerated()), id: \.element.id) { idx, s in
+        LibrarySetRow(index: idx, set: s)
       }
       if let notes = workout.notes, !notes.isEmpty {
         Text(notes)
@@ -133,5 +137,73 @@ private struct LibraryCard: View {
       }
     }
     .padding(.vertical, 4)
+  }
+}
+
+private struct LibrarySetRow: View {
+  let index: Int
+  let set: WorkoutSet
+
+  var body: some View {
+    let rounds = set.effectiveRoundsCount
+    VStack(alignment: .leading, spacing: 2) {
+      HStack {
+        if let t = set.setType?.name, !t.isEmpty {
+          Text("Set \(index + 1): \(t)").font(.caption2).bold()
+        } else {
+          Text("Set \(index + 1)").font(.caption2).bold()
+        }
+        if let r = set.repeatCount, r > 1 {
+          Text("×\(r)").font(.caption2).foregroundColor(.secondary)
+        }
+        if rounds > 1 {
+          Text("• \(rounds) rounds").font(.caption2).foregroundColor(.secondary)
+        }
+      }
+      ForEach(set.sortedExercises) { ex in
+        LibraryExerciseRow(exercise: ex, rounds: rounds)
+      }
+    }
+    .padding(.vertical, 1)
+  }
+}
+
+private struct LibraryExerciseRow: View {
+  let exercise: WorkoutSetExercise
+  let rounds: Int
+
+  var body: some View {
+    if rounds > 1 {
+      VStack(alignment: .leading, spacing: 1) {
+        Text("• \(exercise.displayName)").font(.caption2)
+        let diffs = exercise.effectiveDifficulties(roundsCount: rounds)
+        let reps = exercise.effectiveReps(roundsCount: rounds)
+        ForEach(0..<rounds, id: \.self) { i in
+          HStack {
+            Text("R\(i + 1)").font(.caption2).foregroundColor(.secondary)
+              .frame(width: 24, alignment: .leading)
+            Spacer()
+            if !diffs[i].isEmpty {
+              Text(diffs[i]).font(.caption2).foregroundColor(.secondary)
+            }
+            if !reps[i].isEmpty {
+              Text("\(reps[i]) reps").font(.caption2).foregroundColor(.secondary)
+            }
+          }
+          .padding(.leading, 12)
+        }
+      }
+    } else {
+      HStack {
+        Text("• \(exercise.displayName)").font(.caption2)
+        Spacer()
+        if let d = exercise.difficulty, !d.isEmpty {
+          Text(d).font(.caption2).foregroundColor(.secondary)
+        }
+        if let r = exercise.reps, !r.isEmpty {
+          Text("\(r) reps").font(.caption2).foregroundColor(.secondary)
+        }
+      }
+    }
   }
 }

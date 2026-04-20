@@ -54,7 +54,7 @@ struct AthleteWorkoutHistoryView: View {
     .sheet(isPresented: $showingAdd) {
       AddWorkoutView(
         vm: vm,
-        athleteId: athlete.id,
+        mode: .athlete(id: athlete.id),
         coachId: authVM.currentCoach?.id ?? "",
         gymId: authVM.currentCoach?.gymId ?? "",
         editing: nil
@@ -63,7 +63,7 @@ struct AthleteWorkoutHistoryView: View {
     .sheet(item: $editingWorkout) { workout in
       AddWorkoutView(
         vm: vm,
-        athleteId: athlete.id,
+        mode: .athlete(id: athlete.id),
         coachId: authVM.currentCoach?.id ?? "",
         gymId: authVM.currentCoach?.gymId ?? "",
         editing: workout
@@ -139,23 +139,57 @@ private struct WorkoutRow: View {
       if isExpanded {
         Divider()
         ForEach(Array(workout.sortedSets.enumerated()), id: \.element.id) { idx, set in
+          let rounds = set.effectiveRoundsCount
           VStack(alignment: .leading, spacing: 4) {
             HStack {
-              Text("Set \(idx + 1)").font(.caption).bold()
+              if let typeName = set.setType?.name, !typeName.isEmpty {
+                Text("Set \(idx + 1): \(typeName)").font(.caption).bold()
+              } else {
+                Text("Set \(idx + 1)").font(.caption).bold()
+              }
               if let r = set.repeatCount, r > 1 {
                 Text("×\(r)").font(.caption).foregroundColor(.secondary)
               }
+              if rounds > 1 {
+                Text("• \(rounds) rounds").font(.caption).foregroundColor(.secondary)
+              }
             }
             ForEach(set.sortedExercises) { ex in
-              HStack(spacing: 8) {
-                Text("•").foregroundColor(.secondary)
-                Text(ex.displayName).font(.caption)
-                Spacer()
-                if let d = ex.difficulty, !d.isEmpty {
-                  Text(d).font(.caption).foregroundColor(.secondary)
+              if rounds > 1 {
+                VStack(alignment: .leading, spacing: 2) {
+                  HStack(spacing: 8) {
+                    Text("•").foregroundColor(.secondary)
+                    Text(ex.displayName).font(.caption)
+                    Spacer()
+                  }
+                  let diffs = ex.effectiveDifficulties(roundsCount: rounds)
+                  let reps = ex.effectiveReps(roundsCount: rounds)
+                  ForEach(0..<rounds, id: \.self) { i in
+                    HStack(spacing: 8) {
+                      Text("R\(i + 1)").font(.caption2).foregroundColor(.secondary)
+                        .frame(width: 28, alignment: .leading)
+                      Spacer()
+                      if !diffs[i].isEmpty {
+                        Text(diffs[i]).font(.caption2).foregroundColor(.secondary)
+                      }
+                      if !reps[i].isEmpty {
+                        Text("\(reps[i]) reps").font(.caption2).foregroundColor(.secondary)
+                      }
+                    }
+                    .padding(.leading, 16)
+                  }
                 }
-                if let r = ex.reps, !r.isEmpty {
-                  Text("\(r) reps").font(.caption).foregroundColor(.secondary)
+              } else {
+                HStack(spacing: 8) {
+                  Text("•").foregroundColor(.secondary)
+                  Text(ex.displayName).font(.caption)
+                  Spacer()
+                  if let d = ex.difficulty, !d.isEmpty {
+                    Text(d).font(.caption).foregroundColor(.secondary)
+                  }
+                  if let r = ex.reps, !r.isEmpty {
+                    Text("\(r) reps").font(.caption).foregroundColor(.secondary)
+                  }
                 }
               }
             }
