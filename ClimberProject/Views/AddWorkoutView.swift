@@ -47,7 +47,7 @@ struct AddWorkoutView: View {
     if isSaving || sets.isEmpty { return true }
     if sets.contains(where: { $0.setTypeId == nil }) { return true }
     if requireName && name.trimmingCharacters(in: .whitespaces).isEmpty { return true }
-    if nameIsTaken { return true }
+    if mode.isTemplate && nameIsTaken { return true }
     return false
   }
 
@@ -72,8 +72,8 @@ struct AddWorkoutView: View {
               Task { await recheckName() }
             }
 
-          if nameIsTaken {
-            Text("A workout with that name already exists.")
+          if mode.isTemplate && nameIsTaken {
+            Text("A template with that name already exists.")
               .font(.caption)
               .foregroundColor(.red)
           }
@@ -275,6 +275,7 @@ struct AddWorkoutView: View {
   }
 
   private func recheckName() async {
+    guard mode.isTemplate else { return }
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { nameIsTaken = false; return }
     let taken = await vm.nameIsTaken(trimmed, excludingId: editing?.id)
@@ -290,7 +291,7 @@ struct AddWorkoutView: View {
       let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
       let resolvedSets = try await resolveCustomExercises(sets)
 
-      if !trimmedName.isEmpty {
+      if mode.isTemplate && !trimmedName.isEmpty {
         if await vm.nameIsTaken(trimmedName, excludingId: editing?.id) {
           throw WorkoutVMError.nameTaken
         }
