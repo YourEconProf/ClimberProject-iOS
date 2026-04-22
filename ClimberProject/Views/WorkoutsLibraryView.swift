@@ -7,6 +7,7 @@ struct WorkoutsLibraryView: View {
   @State private var previewing: Workout?
   @State private var copying: Workout?
   @State private var creatingTemplate = false
+  @State private var showGroupSheet = false
   @State private var expanded: Set<String> = []
   @State private var search: String = ""
 
@@ -58,6 +59,13 @@ struct WorkoutsLibraryView: View {
         ToolbarItem(placement: .primaryAction) {
           Button { creatingTemplate = true } label: { Image(systemName: "plus") }
         }
+        ToolbarItem(placement: .navigationBarLeading) {
+          Button {
+            showGroupSheet = true
+          } label: {
+            Label("Group Workout", systemImage: "person.3")
+          }
+        }
       }
       .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
       .task {
@@ -88,6 +96,10 @@ struct WorkoutsLibraryView: View {
       }
       .sheet(item: $copying) { workout in
         CopyWorkoutSheet(vm: vm, source: workout)
+      }
+      .sheet(isPresented: $showGroupSheet) {
+        GroupWorkoutSheet(workoutVM: vm)
+          .environmentObject(authVM)
       }
     }
   }

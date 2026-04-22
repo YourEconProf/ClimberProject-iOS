@@ -75,6 +75,10 @@ class AuthViewModel: ObservableObject {
     currentCoach = nil
   }
 
+  func resetPassword(email: String) async throws {
+    try await supabase.auth.resetPasswordForEmail(email)
+  }
+
   func checkSession() async {
     do {
       let session = try await supabase.auth.session

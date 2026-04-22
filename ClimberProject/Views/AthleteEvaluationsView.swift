@@ -10,25 +10,48 @@ struct AthleteEvaluationsView: View {
   @EnvironmentObject var authVM: AuthViewModel
   @StateObject private var vm = EvaluationViewModel()
   @State private var addMode: EvaluationAddMode?
+  @State private var showTable = false
+
+  // Unique dates for table columns, sorted oldest → newest
+  private var tableDates: [String] {
+    let dates = Set(vm.evaluations.map { String($0.evaluatedAt.prefix(10)) })
+    return dates.sorted()
+  }
+
+  // Criteria that have at least one evaluation
+  private var criteriaWithData: [AssessmentCriteria] {
+    vm.criteria.filter { c in vm.evaluations.contains { $0.criteriaId == c.id } }
+  }
 
   var body: some View {
     Group {
-      if vm.isLoading {
+      if vm.isLoading && vm.evaluations.isEmpty && vm.criteria.isEmpty {
         ProgressView()
+      } else if showTable {
+        tableView
       } else {
-        List {
-          Section {
-            modeRow("FM Evaluation", icon: "figure.climbing", mode: .fm)
-            modeRow("Morpho Evaluation", icon: "ruler", mode: .morpho)
-            modeRow("Strength Evaluation", icon: "dumbbell", mode: .strength)
-            modeRow("Custom Evaluation", icon: "slider.horizontal.3", mode: .custom)
+        listView
+      }
+    }
+    .navigationTitle("Evaluations")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      if !vm.evaluations.isEmpty {
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            showTable.toggle()
+          } label: {
+            Image(systemName: showTable ? "list.bullet" : "tablecells")
           }
         }
       }
     }
-    .navigationTitle(athlete.displayName)
-    .navigationBarTitleDisplayMode(.inline)
-    .task { await vm.fetchCriteria() }
+    .task {
+      await withTaskGroup(of: Void.self) { g in
+        g.addTask { await vm.fetchCriteria() }
+        g.addTask { await vm.fetchEvaluations(athleteId: athlete.id) }
+      }
+    }
     .sheet(item: $addMode) { mode in
       AddEvaluationView(
         vm: vm,
@@ -39,12 +62,111 @@ struct AthleteEvaluationsView: View {
     }
   }
 
+  // MARK: - List View
+
+  private var listView: some View {
+    List {
+      Section {
+        modeRow("FM Evaluation", icon: "figure.climbing", mode: .fm)
+        modeRow("Morpho Evaluation", icon: "ruler", mode: .morpho)
+        modeRow("Strength Evaluation", icon: "dumbbell", mode: .strength)
+        modeRow("Custom Evaluation", icon: "slider.horizontal.3", mode: .custom)
+      }
+
+      if !vm.evaluations.isEmpty {
+        Section("History") {
+          ForEach(vm.evaluations) { evaluation in
+            let c = vm.criteria.first { $0.id == evaluation.criteriaId }
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(c?.name ?? "Unknown").font(.subheadline)
+                Text(evaluation.evaluatedAt.displayDate)
+                  .font(.caption).foregroundColor(.secondary)
+              }
+              Spacer()
+              Text(formatValue(evaluation.value, unit: c?.unit))
+                .font(.subheadline).foregroundColor(.secondary)
+            }
+          }
+        }
+      }
+    }
+    .overlay {
+      if vm.evaluations.isEmpty && !vm.isLoading {
+        ContentUnavailableView("No Evaluations", systemImage: "chart.line.uptrend.xyaxis",
+          description: Text("Tap an evaluation type above to record the first entry."))
+      }
+    }
+  }
+
+  // MARK: - Table View
+
+  private var tableView: some View {
+    ScrollView([.horizontal, .vertical]) {
+      VStack(alignment: .leading, spacing: 0) {
+        // Header row
+        HStack(spacing: 0) {
+          Text("Criteria")
+            .font(.caption).fontWeight(.semibold)
+            .frame(width: 130, alignment: .leading)
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(Color(UIColor.secondarySystemBackground))
+          ForEach(tableDates, id: \.self) { date in
+            Text(date.displayDateShort)
+              .font(.caption).fontWeight(.semibold)
+              .frame(width: 80, alignment: .center)
+              .padding(.horizontal, 4).padding(.vertical, 6)
+              .background(Color(UIColor.secondarySystemBackground))
+          }
+        }
+        Divider()
+
+        // Data rows
+        ForEach(Array(criteriaWithData.enumerated()), id: \.element.id) { idx, c in
+          HStack(spacing: 0) {
+            Text(c.name)
+              .font(.caption)
+              .frame(width: 130, alignment: .leading)
+              .padding(.horizontal, 8).padding(.vertical, 6)
+              .background(idx % 2 == 1 ? Color(UIColor.tertiarySystemBackground) : Color.clear)
+            ForEach(tableDates, id: \.self) { date in
+              Text(cellValue(criteriaId: c.id, date: date, unit: c.unit))
+                .font(.caption).foregroundColor(.secondary)
+                .frame(width: 80, alignment: .center)
+                .padding(.horizontal, 4).padding(.vertical, 6)
+                .background(idx % 2 == 1 ? Color(UIColor.tertiarySystemBackground) : Color.clear)
+            }
+          }
+          Divider().padding(.leading, 130)
+        }
+      }
+      .padding(.vertical, 8)
+    }
+  }
+
+  // MARK: - Helpers
+
   private func modeRow(_ label: String, icon: String, mode: EvaluationAddMode) -> some View {
-    Button {
-      addMode = mode
-    } label: {
+    Button { addMode = mode } label: {
       Label(label, systemImage: icon)
     }
     .foregroundColor(.primary)
+  }
+
+  private func cellValue(criteriaId: String, date: String, unit: String?) -> String {
+    let matches = vm.evaluations.filter {
+      $0.criteriaId == criteriaId && $0.evaluatedAt.hasPrefix(date)
+    }
+    guard let best = matches.max(by: { $0.evaluatedAt < $1.evaluatedAt }) else { return "—" }
+    return formatValue(best.value, unit: unit)
+  }
+
+  private func formatValue(_ value: Double?, unit: String?) -> String {
+    guard let value else { return "—" }
+    let s = value.truncatingRemainder(dividingBy: 1) == 0
+      ? String(format: "%.0f", value)
+      : String(format: "%.1f", value)
+    if let u = unit { return "\(s) \(u)" }
+    return s
   }
 }

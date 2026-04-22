@@ -21,13 +21,23 @@ struct SettingsView: View {
   @State private var gym: Gym?
   @StateObject private var setTypeVM = SetTypeViewModel()
   @StateObject private var workoutVM = WorkoutViewModel()
+  @StateObject private var programVM = ProgramViewModel()
+  @StateObject private var evalVM = EvaluationViewModel()
+
   @State private var newSetTypeName = ""
   @State private var newExerciseName = ""
+  @State private var newProgramName = ""
+  @State private var newCriteriaName = ""
+  @State private var newCriteriaUnit = ""
+
   @State private var setTypeError: String?
   @State private var exerciseError: String?
+  @State private var programError: String?
+  @State private var criteriaError: String?
+
   @FocusState private var focusedField: Field?
 
-  private enum Field { case setType, exercise }
+  private enum Field { case setType, exercise, program, criteria }
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -63,6 +73,88 @@ struct SettingsView: View {
           }
         }
 
+        // Programs
+        Section("Programs") {
+          ForEach(programVM.programs) { p in
+            Text(p.name)
+          }
+          .onDelete { indices in
+            Task {
+              for i in indices {
+                let id = programVM.programs[i].id
+                do { try await programVM.deleteProgram(id: id) }
+                catch { programError = error.localizedDescription }
+              }
+            }
+          }
+          HStack {
+            TextField("Add program…", text: $newProgramName)
+              .focused($focusedField, equals: .program)
+              .submitLabel(.done)
+              .onSubmit { Task { await addProgram() } }
+            Button("Add") { Task { await addProgram() } }
+              .disabled(newProgramName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+          if let programError {
+            Text(programError).foregroundColor(.red).font(.caption)
+          }
+        }
+
+        // Assessment Criteria
+        Section("Assessment Criteria") {
+          ForEach(evalVM.criteria) { c in
+            VStack(alignment: .leading, spacing: 6) {
+              HStack {
+                Text(c.name).font(.subheadline)
+                if let unit = c.unit {
+                  Text(unit)
+                    .font(.caption2)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+                Spacer()
+              }
+              HStack(spacing: 8) {
+                flagToggle("FM", active: c.isFm) {
+                  Task { await evalVM.toggleFlag(.fm, for: c.id) }
+                }
+                flagToggle("Morpho", active: c.isMorpho) {
+                  Task { await evalVM.toggleFlag(.morpho, for: c.id) }
+                }
+                flagToggle("Strength", active: c.isStrength) {
+                  Task { await evalVM.toggleFlag(.strength, for: c.id) }
+                }
+              }
+            }
+            .padding(.vertical, 2)
+          }
+          .onDelete { indices in
+            Task {
+              for i in indices {
+                let id = evalVM.criteria[i].id
+                do { try await evalVM.deleteCriteria(id: id) }
+                catch { criteriaError = error.localizedDescription }
+              }
+            }
+          }
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              TextField("Criteria name…", text: $newCriteriaName)
+                .focused($focusedField, equals: .criteria)
+                .submitLabel(.next)
+              TextField("Unit (optional)", text: $newCriteriaUnit)
+                .frame(maxWidth: 100)
+            }
+            Button("Add Criteria") { Task { await addCriteria() } }
+              .disabled(newCriteriaName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+          .padding(.vertical, 4)
+          if let criteriaError {
+            Text(criteriaError).foregroundColor(.red).font(.caption)
+          }
+        }
+
         // Set Types
         Section("Set Types") {
           ForEach(setTypeVM.setTypes) { st in
@@ -82,10 +174,8 @@ struct SettingsView: View {
               .focused($focusedField, equals: .setType)
               .submitLabel(.done)
               .onSubmit { Task { await addSetType() } }
-            Button("Add") {
-              Task { await addSetType() }
-            }
-            .disabled(newSetTypeName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Add") { Task { await addSetType() } }
+              .disabled(newSetTypeName.trimmingCharacters(in: .whitespaces).isEmpty)
           }
           if let setTypeError {
             Text(setTypeError).foregroundColor(.red).font(.caption)
@@ -111,10 +201,8 @@ struct SettingsView: View {
               .focused($focusedField, equals: .exercise)
               .submitLabel(.done)
               .onSubmit { Task { await addExercise() } }
-            Button("Add") {
-              Task { await addExercise() }
-            }
-            .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Add") { Task { await addExercise() } }
+              .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
           }
           if let exerciseError {
             Text(exerciseError).foregroundColor(.red).font(.caption)
@@ -157,7 +245,52 @@ struct SettingsView: View {
           await setTypeVM.fetch(gymId: gymId)
           await workoutVM.fetchExercises(gymId: gymId)
         }
+        await programVM.fetchPrograms()
+        await evalVM.fetchCriteria()
       }
+    }
+  }
+
+  @ViewBuilder
+  private func flagToggle(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(label)
+        .font(.caption2).bold()
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(active ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1))
+        .foregroundColor(active ? .accentColor : .secondary)
+        .clipShape(Capsule())
+    }
+    .buttonStyle(.borderless)
+  }
+
+  private func addProgram() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    let trimmed = newProgramName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    programError = nil
+    do {
+      try await programVM.addProgram(gymId: gymId, name: trimmed)
+      newProgramName = ""
+      focusedField = nil
+    } catch {
+      programError = error.localizedDescription
+    }
+  }
+
+  private func addCriteria() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    let trimmed = newCriteriaName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    criteriaError = nil
+    do {
+      try await evalVM.addCriteria(gymId: gymId, name: trimmed,
+                                   unit: newCriteriaUnit.trimmingCharacters(in: .whitespaces))
+      newCriteriaName = ""
+      newCriteriaUnit = ""
+      focusedField = nil
+    } catch {
+      criteriaError = error.localizedDescription
     }
   }
 

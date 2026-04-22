@@ -18,7 +18,7 @@ struct WorkoutPrintView: View {
           if let a = athleteName, workout.name != nil {
             Text("Athlete: \(a)").font(.system(size: 11))
           }
-          Text("Date: \(workout.workoutDate)").font(.system(size: 11))
+          Text("Date: \(workout.workoutDate.displayDateLongWeekday)").font(.system(size: 11))
           if let c = workout.coach?.name {
             Text("Coach: \(c)").font(.system(size: 11))
           }

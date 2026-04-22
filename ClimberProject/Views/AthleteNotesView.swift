@@ -78,7 +78,7 @@ private struct NoteRow: View {
             .font(.caption)
             .foregroundColor(.secondary)
         }
-        Text(String(note.createdAt.prefix(10)))
+        Text(note.createdAt.displayDate)
           .font(.caption)
           .foregroundColor(.secondary)
       }

@@ -13,7 +13,7 @@ struct CriteriaHistoryView: View {
       } else {
         ForEach(history) { evaluation in
           HStack {
-            Text(String(evaluation.evaluatedAt.prefix(10)))
+            Text(evaluation.evaluatedAt.displayDate)
             Spacer()
             Text(valueString(evaluation.value))
               .foregroundColor(.secondary)
