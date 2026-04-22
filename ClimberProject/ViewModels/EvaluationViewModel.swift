@@ -69,7 +69,81 @@ class EvaluationViewModel: ObservableObject {
       .filter { $0.criteriaId == criteriaId }
       .sorted { $0.evaluatedAt > $1.evaluatedAt }
   }
+
+  // MARK: - Criteria CRUD (Settings)
+
+  func addCriteria(gymId: String, name: String, unit: String?) async throws {
+    struct Insert: Encodable {
+      let gymId: String
+      let name: String
+      let unit: String?
+      enum CodingKeys: String, CodingKey {
+        case gymId = "gym_id"
+        case name
+        case unit
+      }
+    }
+    let trimmedUnit = unit?.trimmingCharacters(in: .whitespaces)
+    let insert = Insert(gymId: gymId, name: name.trimmingCharacters(in: .whitespaces),
+                        unit: trimmedUnit?.isEmpty == true ? nil : trimmedUnit)
+    let created: [AssessmentCriteria] = try await supabase
+      .from("assessment_criteria")
+      .insert(insert)
+      .select()
+      .execute()
+      .value
+    if let c = created.first {
+      criteria.append(c)
+      criteria.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+  }
+
+  func deleteCriteria(id: String) async throws {
+    try await supabase
+      .from("assessment_criteria")
+      .delete()
+      .eq("id", value: id)
+      .execute()
+    criteria.removeAll { $0.id == id }
+  }
+
+  func toggleFlag(_ flag: CriteriaFlag, for id: String) async {
+    guard let c = criteria.first(where: { $0.id == id }) else { return }
+    do {
+      switch flag {
+      case .fm:
+        try await supabase.from("assessment_criteria")
+          .update(FmPatch(isFm: !c.isFm)).eq("id", value: id).execute()
+      case .morpho:
+        try await supabase.from("assessment_criteria")
+          .update(MorphoPatch(isMorpho: !c.isMorpho)).eq("id", value: id).execute()
+      case .strength:
+        try await supabase.from("assessment_criteria")
+          .update(StrengthPatch(isStrength: !c.isStrength)).eq("id", value: id).execute()
+      }
+      await fetchCriteria()
+    } catch {
+      self.error = error.localizedDescription
+    }
+  }
 }
+
+private struct FmPatch: Encodable {
+  let isFm: Bool
+  enum CodingKeys: String, CodingKey { case isFm = "is_fm" }
+}
+
+private struct MorphoPatch: Encodable {
+  let isMorpho: Bool
+  enum CodingKeys: String, CodingKey { case isMorpho = "is_morpho" }
+}
+
+private struct StrengthPatch: Encodable {
+  let isStrength: Bool
+  enum CodingKeys: String, CodingKey { case isStrength = "is_strength" }
+}
+
+enum CriteriaFlag { case fm, morpho, strength }
 
 struct EvaluationInsert: Encodable {
   let athleteId: String

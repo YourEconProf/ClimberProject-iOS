@@ -105,7 +105,7 @@ private struct WorkoutRow: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 6) {
-            Text(workout.workoutDate)
+            Text(workout.workoutDate.displayDateWithWeekday)
               .font(.subheadline).bold()
             if let name = workout.name ?? workout.templateName {
               Text(": \(name)")
@@ -245,7 +245,7 @@ private struct QuickNotesSheet: View {
           Section { Text(error).foregroundColor(.red).font(.caption) }
         }
       }
-      .navigationTitle(workout.name ?? workout.workoutDate)
+      .navigationTitle(workout.name ?? workout.workoutDate.displayDate)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

@@ -3,11 +3,19 @@ import SwiftUI
 enum WorkoutFormMode: Equatable {
   case athlete(id: String)
   case template(gymId: String)
+  case group(athleteIds: [String], programName: String)
 
   var isTemplate: Bool {
     if case .template = self { return true }
     return false
   }
+
+  var isGroup: Bool {
+    if case .group = self { return true }
+    return false
+  }
+
+  var showDatePicker: Bool { !isTemplate }
 }
 
 struct AddWorkoutView: View {
@@ -22,94 +30,100 @@ struct AddWorkoutView: View {
   @State private var date: Date = Date()
   @State private var name: String = ""
   @State private var notes: String = ""
-  @State private var sets: [DraftSet] = [DraftSet(exercises: [DraftExercise()])]
+  @State private var sets: [DraftSet] = []
   @State private var isSaving = false
   @State private var error: String?
+
+  // Template autocomplete (template mode only)
   @State private var showingTemplateSuggestions = false
   @State private var templateAppliedFrom: String?
   @State private var nameIsTaken = false
 
+  // Add Template picker
+  @State private var showingTemplatePicker = false
+
+  // Save as Template
+  @State private var showSaveAsTemplate = false
+  @State private var saveAsTemplateName = ""
+  @State private var isSavingTemplate = false
+  @State private var saveTemplateError: String?
+
   private let dateFmt: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM-dd"
+    f.locale = Locale(identifier: "en_US_POSIX")
     return f
   }()
 
-  private var requireName: Bool { mode.isTemplate }
   private var titleString: String {
-    if editing != nil {
-      return mode.isTemplate ? "Edit Template" : "Edit Workout"
+    if editing != nil { return mode.isTemplate ? "Edit Template" : "Edit Workout" }
+    switch mode {
+    case .athlete:               return "New Workout"
+    case .template:              return "New Template"
+    case .group(_, let name):    return "\(name) · Group"
     }
-    return mode.isTemplate ? "New Template" : "New Workout"
   }
 
   private var saveDisabled: Bool {
     if isSaving || sets.isEmpty { return true }
     if sets.contains(where: { $0.setTypeId == nil }) { return true }
-    if requireName && name.trimmingCharacters(in: .whitespaces).isEmpty { return true }
-    if mode.isTemplate && nameIsTaken { return true }
+    if mode.isTemplate && !name.trimmingCharacters(in: .whitespaces).isEmpty && nameIsTaken { return true }
     return false
   }
 
   var body: some View {
     NavigationStack {
       Form {
-        if !mode.isTemplate {
-          Section {
-            DatePicker("Date", selection: $date, displayedComponents: .date)
-          }
-        } else {
-          Section {
-            Label("Workout Template", systemImage: "doc.plaintext")
-              .foregroundColor(.secondary)
-          }
-        }
-
+        // Header section
         Section {
-          TextField(requireName ? "Template name (required)" : "Optional name (makes this a template)", text: $name)
-            .onChange(of: name) { _ in
-              showingTemplateSuggestions = !name.isEmpty && editing == nil && !mode.isTemplate
-              Task { await recheckName() }
+          if mode.showDatePicker {
+            DatePicker("Date", selection: $date, displayedComponents: .date)
+          } else {
+            // Template mode: name field with autocomplete
+            TextField("Template name (optional)", text: $name)
+              .onChange(of: name) { _ in
+                showingTemplateSuggestions = !name.isEmpty && editing == nil
+                Task { await recheckName() }
+              }
+
+            if nameIsTaken {
+              Text("A template with that name already exists.")
+                .font(.caption).foregroundColor(.red)
             }
 
-          if mode.isTemplate && nameIsTaken {
-            Text("A template with that name already exists.")
-              .font(.caption)
-              .foregroundColor(.red)
-          }
+            if let from = templateAppliedFrom {
+              Text("Sets loaded from: \(from)")
+                .font(.caption).foregroundColor(.secondary)
+            }
 
-          if let from = templateAppliedFrom {
-            Text("Sets loaded from: \(from)")
-              .font(.caption)
-              .foregroundColor(.secondary)
-          }
-
-          if showingTemplateSuggestions {
-            let matches = vm.namedWorkouts.filter {
-              ($0.name ?? "").localizedCaseInsensitiveContains(name) && $0.name != nil
-            }.prefix(5)
-            if !matches.isEmpty {
-              VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(matches), id: \.id) { template in
-                  Button {
-                    applyTemplate(template)
-                  } label: {
-                    HStack {
-                      Text(template.name ?? "")
-                      Spacer()
-                      Text("\(template.sortedSets.count) sets")
-                        .font(.caption).foregroundColor(.secondary)
+            if showingTemplateSuggestions {
+              let matches = vm.namedWorkouts.filter {
+                ($0.name ?? "").localizedCaseInsensitiveContains(name) && $0.name != nil
+              }.prefix(5)
+              if !matches.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                  ForEach(Array(matches), id: \.id) { template in
+                    Button {
+                      replaceWithTemplate(template)
+                    } label: {
+                      HStack {
+                        Text(template.name ?? "")
+                        Spacer()
+                        Text("\(template.sortedSets.count) sets")
+                          .font(.caption).foregroundColor(.secondary)
+                      }
+                      .padding(.vertical, 6)
                     }
-                    .padding(.vertical, 6)
+                    .buttonStyle(.plain)
+                    Divider()
                   }
-                  .buttonStyle(.plain)
-                  Divider()
                 }
               }
             }
           }
         }
 
+        // Sets
         ForEach($sets) { $draftSet in
           Section {
             HStack {
@@ -160,7 +174,14 @@ struct AddWorkoutView: View {
           }
         }
 
+        // Add Set / Add Template row
         Section {
+          Button {
+            showingTemplatePicker = true
+          } label: {
+            Label("Add Template", systemImage: "doc.on.doc")
+          }
+
           Button {
             var new = DraftSet()
             var ex = DraftExercise()
@@ -178,6 +199,19 @@ struct AddWorkoutView: View {
             .lineLimit(2...8)
         }
 
+        // Save as Template (athlete mode, creating new workout)
+        if case .athlete = mode, editing == nil {
+          Section {
+            Button {
+              saveAsTemplateName = name
+              saveTemplateError = nil
+              showSaveAsTemplate = true
+            } label: {
+              Label("Save as Template", systemImage: "square.and.arrow.down")
+            }
+          }
+        }
+
         if let error {
           Section { Text(error).foregroundColor(.red).font(.caption) }
         }
@@ -193,17 +227,28 @@ struct AddWorkoutView: View {
       }
       .onAppear(perform: bootstrap)
       .task {
-        if vm.setTypes.isEmpty {
-          await vm.fetchSetTypes(gymId: gymId)
+        if vm.setTypes.isEmpty { await vm.fetchSetTypes(gymId: gymId) }
+        if vm.exercises.isEmpty { await vm.fetchExercises(gymId: gymId) }
+        if vm.namedWorkouts.isEmpty { await vm.fetchNamedWorkouts() }
+      }
+      .sheet(isPresented: $showingTemplatePicker) {
+        TemplatePickerSheet(templates: vm.namedWorkouts) { template in
+          appendTemplate(template)
+          showingTemplatePicker = false
         }
-        if vm.exercises.isEmpty {
-          await vm.fetchExercises(gymId: gymId)
-        }
+      }
+      .alert("Save as Template", isPresented: $showSaveAsTemplate) {
+        TextField("Template name", text: $saveAsTemplateName)
+        Button("Save") { Task { await saveAsTemplate() } }
+          .disabled(saveAsTemplateName.trimmingCharacters(in: .whitespaces).isEmpty)
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        if let e = saveTemplateError { Text(e) }
       }
     }
   }
 
-  // MARK: - Helpers
+  // MARK: - Bootstrap
 
   private func bootstrap() {
     guard let w = editing else { return }
@@ -226,16 +271,30 @@ struct AddWorkoutView: View {
         }
       )
     }
-    if sets.isEmpty {
-      var ex = DraftExercise()
-      ex.difficulties = [""]
-      ex.reps = [""]
-      sets = [DraftSet(exercises: [ex])]
-    }
   }
 
-  private func applyTemplate(_ template: Workout) {
-    sets = template.sortedSets.map { s in
+  // MARK: - Template operations
+
+  private func replaceWithTemplate(_ template: Workout) {
+    sets = draftSets(from: template)
+    if let tNotes = template.notes, notes.isEmpty { notes = tNotes }
+    let tName = template.templateName ?? template.name
+    templateAppliedFrom = tName
+    name = tName ?? ""
+    showingTemplateSuggestions = false
+    nameIsTaken = false
+  }
+
+  private func appendTemplate(_ template: Workout) {
+    sets.append(contentsOf: draftSets(from: template))
+    if let tNotes = template.notes, notes.isEmpty { notes = tNotes }
+    templateAppliedFrom = (templateAppliedFrom == nil)
+      ? (template.templateName ?? template.name)
+      : nil
+  }
+
+  private func draftSets(from template: Workout) -> [DraftSet] {
+    template.sortedSets.map { s in
       let rc = s.effectiveRoundsCount
       return DraftSet(
         setTypeId: s.setTypeId,
@@ -251,13 +310,83 @@ struct AddWorkoutView: View {
         }
       )
     }
-    if let tNotes = template.notes, notes.isEmpty { notes = tNotes }
-    let tName = template.templateName ?? template.name
-    templateAppliedFrom = tName
-    name = tName ?? ""
-    showingTemplateSuggestions = false
-    nameIsTaken = false
   }
+
+  // MARK: - Save
+
+  private func save() async {
+    isSaving = true
+    error = nil
+    do {
+      let dateStr = dateFmt.string(from: date)
+      let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+      let resolvedSets = try await resolveCustomExercises(sets)
+
+      if mode.isTemplate && !trimmedName.isEmpty {
+        if await vm.nameIsTaken(trimmedName, excludingId: editing?.id) {
+          throw WorkoutVMError.nameTaken
+        }
+      }
+
+      if let editing {
+        try await vm.updateWorkout(editing, date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets)
+      } else {
+        switch mode {
+        case .athlete(let athleteId):
+          _ = try await vm.createWorkout(
+            athleteId: athleteId, coachId: coachId, gymId: nil,
+            date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets
+          )
+        case .template(let gId):
+          _ = try await vm.createWorkout(
+            athleteId: nil, coachId: coachId, gymId: gId,
+            date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets
+          )
+        case .group(let athleteIds, _):
+          for athleteId in athleteIds {
+            _ = try await vm.createWorkout(
+              athleteId: athleteId, coachId: coachId, gymId: gymId,
+              date: dateStr, name: trimmedName.isEmpty ? nil : trimmedName,
+              notes: trimmedNotes, sets: resolvedSets
+            )
+          }
+        }
+      }
+      dismiss()
+    } catch {
+      self.error = error.localizedDescription
+      isSaving = false
+    }
+  }
+
+  private func saveAsTemplate() async {
+    let trimmedName = saveAsTemplateName.trimmingCharacters(in: .whitespaces)
+    guard !trimmedName.isEmpty else { return }
+    isSavingTemplate = true
+    saveTemplateError = nil
+    do {
+      if await vm.nameIsTaken(trimmedName, excludingId: nil) {
+        saveTemplateError = "A template named "\(trimmedName)" already exists."
+        isSavingTemplate = false
+        showSaveAsTemplate = true
+        return
+      }
+      let resolvedSets = try await resolveCustomExercises(sets)
+      let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+      _ = try await vm.createWorkout(
+        athleteId: nil, coachId: coachId, gymId: gymId,
+        date: dateFmt.string(from: date), name: trimmedName, notes: trimmedNotes, sets: resolvedSets
+      )
+      dismiss()
+    } catch {
+      saveTemplateError = error.localizedDescription
+      isSavingTemplate = false
+      showSaveAsTemplate = true
+    }
+  }
+
+  // MARK: - Helpers
 
   private func resizeRounds(in binding: Binding<DraftSet>, to newCount: Int) {
     let target = max(1, newCount)
@@ -281,54 +410,6 @@ struct AddWorkoutView: View {
     guard !trimmed.isEmpty else { nameIsTaken = false; return }
     let taken = await vm.nameIsTaken(trimmed, excludingId: editing?.id)
     await MainActor.run { nameIsTaken = taken }
-  }
-
-  private func save() async {
-    isSaving = true
-    error = nil
-    do {
-      let dateStr = dateFmt.string(from: date)
-      let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-      let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-      let resolvedSets = try await resolveCustomExercises(sets)
-
-      if mode.isTemplate && !trimmedName.isEmpty {
-        if await vm.nameIsTaken(trimmedName, excludingId: editing?.id) {
-          throw WorkoutVMError.nameTaken
-        }
-      }
-
-      if let editing {
-        try await vm.updateWorkout(editing, date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets)
-      } else {
-        switch mode {
-        case .athlete(let athleteId):
-          _ = try await vm.createWorkout(
-            athleteId: athleteId,
-            coachId: coachId,
-            gymId: nil,
-            date: dateStr,
-            name: trimmedName,
-            notes: trimmedNotes,
-            sets: resolvedSets
-          )
-        case .template(let gymId):
-          _ = try await vm.createWorkout(
-            athleteId: nil,
-            coachId: coachId,
-            gymId: gymId,
-            date: dateStr,
-            name: trimmedName,
-            notes: trimmedNotes,
-            sets: resolvedSets
-          )
-        }
-      }
-      dismiss()
-    } catch {
-      self.error = error.localizedDescription
-      isSaving = false
-    }
   }
 
   private func resolveCustomExercises(_ input: [DraftSet]) async throws -> [DraftSet] {
@@ -360,6 +441,50 @@ struct AddWorkoutView: View {
       ))
     }
     return out.filter { !$0.exercises.isEmpty }
+  }
+}
+
+// MARK: - Template picker sheet
+
+private struct TemplatePickerSheet: View {
+  let templates: [Workout]
+  let onSelect: (Workout) -> Void
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if templates.isEmpty {
+          ContentUnavailableView("No Templates",
+            systemImage: "doc.plaintext",
+            description: Text("Create named workouts in the library first."))
+        } else {
+          ForEach(templates) { w in
+            Button {
+              onSelect(w)
+            } label: {
+              HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(w.name ?? "Untitled").font(.subheadline)
+                  Text("\(w.sortedSets.count) sets · \(w.totalExerciseCount) exercises")
+                    .font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                Image(systemName: "plus.circle").foregroundColor(.accentColor)
+              }
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+      .navigationTitle("Append Template")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
+      }
+    }
   }
 }
 
@@ -415,8 +540,7 @@ private struct ExerciseRowEditor: View {
           ForEach(0..<roundsCount, id: \.self) { r in
             HStack {
               Text("R\(r + 1)")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+                .font(.caption2).foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
               TextField("Difficulty", text: bindingForDifficulty(r))
                 .textFieldStyle(.roundedBorder)

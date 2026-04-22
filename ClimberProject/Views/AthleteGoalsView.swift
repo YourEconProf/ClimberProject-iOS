@@ -53,7 +53,7 @@ private struct GoalRow: View {
       Text(goal.description)
         .font(.body)
       HStack {
-        Text(String(goal.setAt.prefix(10)))
+        Text(goal.setAt.displayDate)
           .font(.caption)
           .foregroundColor(.secondary)
         Spacer()
