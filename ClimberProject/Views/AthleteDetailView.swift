@@ -7,7 +7,6 @@ struct AthleteDetailView: View {
   @StateObject private var evalVM = EvaluationViewModel()
   @StateObject private var goalVM = GoalViewModel()
   @StateObject private var workoutVM = WorkoutViewModel()
-  @StateObject private var measurementVM = MeasurementViewModel()
   @StateObject private var competitionVM = CompetitionViewModel()
   @StateObject private var programVM = ProgramViewModel()
 
@@ -67,27 +66,6 @@ struct AthleteDetailView: View {
         }
         NavigationLink("Workout History (\(workoutVM.workouts.count))") {
           AthleteWorkoutHistoryView(athlete: athlete, vm: workoutVM)
-        }
-      }
-
-      // Measurements
-      Section("Measurements") {
-        if let m = measurementVM.latest {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(m.measuredAt.displayDate)
-              .font(.caption).foregroundColor(.secondary)
-            HStack(spacing: 16) {
-              if let v = m.heightCm    { quickStat("Ht",    v, "cm") }
-              if let v = m.wingspanCm  { quickStat("Ws",    v, "cm") }
-              if let v = m.apeIndexCm  { quickStat("Ape",   v, "cm") }
-              if let v = m.weightKg    { quickStat("Wt",    v, "kg") }
-            }
-          }
-          .padding(.vertical, 2)
-        }
-        NavigationLink("All Measurements (\(measurementVM.measurements.count))") {
-          AthleteMeasurementsView(athlete: athlete, vm: measurementVM)
-            .environmentObject(authVM)
         }
       }
 
@@ -189,7 +167,6 @@ struct AthleteDetailView: View {
         group.addTask { await evalVM.fetchEvaluations(athleteId: athlete.id) }
         group.addTask { await goalVM.fetchGoals(athleteId: athlete.id) }
         group.addTask { await workoutVM.fetchWorkouts(athleteId: athlete.id) }
-        group.addTask { await measurementVM.fetch(athleteId: athlete.id) }
         group.addTask { await competitionVM.fetch(athleteId: athlete.id) }
         group.addTask { await programVM.fetchPrograms() }
         group.addTask { await programVM.fetchEnrollments(athleteId: athlete.id) }
@@ -222,14 +199,6 @@ struct AthleteDetailView: View {
     }
   }
 
-  @ViewBuilder
-  private func quickStat(_ label: String, _ value: Double, _ unit: String) -> some View {
-    VStack(spacing: 1) {
-      Text(fmt(value)).font(.caption).bold()
-      Text("\(label) \(unit)").font(.caption2).foregroundColor(.secondary)
-    }
-  }
-
   private func formatValue(_ value: Double?, unit: String?) -> String {
     guard let value else { return "—" }
     let formatted = value.truncatingRemainder(dividingBy: 1) == 0
@@ -237,12 +206,6 @@ struct AthleteDetailView: View {
       : String(format: "%.1f", value)
     if let unit { return "\(formatted) \(unit)" }
     return formatted
-  }
-
-  private func fmt(_ v: Double) -> String {
-    v.truncatingRemainder(dividingBy: 1) == 0
-      ? String(format: "%.0f", v)
-      : String(format: "%.1f", v)
   }
 
   private func ordinal(_ n: Int) -> String {
