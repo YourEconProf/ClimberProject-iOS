@@ -367,7 +367,7 @@ struct AddWorkoutView: View {
     saveTemplateError = nil
     do {
       if await vm.nameIsTaken(trimmedName, excludingId: nil) {
-        saveTemplateError = "A template named "\(trimmedName)" already exists."
+        saveTemplateError = "A template named \"\(trimmedName)\" already exists."
         isSavingTemplate = false
         showSaveAsTemplate = true
         return
