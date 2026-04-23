@@ -50,7 +50,7 @@ struct DraftSet: Identifiable, Equatable {
 
 // Nested select used for workout reads
 private let workoutSelectWithNesting = """
-*, coaches(name), athletes(id, first_name, last_name), workout_sets(*, set_types(name), workout_set_exercises(*, exercises(name)))
+*, coaches(name), athletes(id, first_name, last_name), workout_sets(*, set_types(name), workout_set_exercises(*, exercises(name, difficulty_type)))
 """
 
 @MainActor
@@ -343,9 +343,9 @@ class WorkoutViewModel: ObservableObject {
 
   // MARK: - Exercise library mgmt
 
-  func addExercise(gymId: String, name: String) async throws -> Exercise {
+  func addExercise(gymId: String, name: String, difficultyType: String = "free_text") async throws -> Exercise {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    let insert = ExerciseInsert(gymId: gymId, name: trimmed)
+    let insert = ExerciseInsert(gymId: gymId, name: trimmed, difficultyType: difficultyType)
     let created: Exercise = try await supabase
       .from("exercises")
       .insert(insert)
@@ -407,6 +407,72 @@ class WorkoutViewModel: ObservableObject {
         throw WorkoutVMError.setTypeInUse
       }
       throw error
+    }
+  }
+
+  // MARK: - Flash token resolution
+
+  // Resolves [flash]/[flash-1]/[flash-2] tokens in difficulty_rounds for athlete workouts.
+  // Skipped entirely when saving templates (athleteId is nil).
+  // Queries Supabase directly for max grade criteria so no external VM is required.
+  func resolveFlashTokens(in sets: [DraftSet], athleteId: String, gymId: String) async -> [DraftSet] {
+    let needsBoulder = sets.flatMap(\.exercises).contains { ex in
+      let type_ = exercises.first { $0.id == ex.exerciseId }?.difficultyType ?? "free_text"
+      return type_ == "boulder" && ex.difficulties.contains(where: GradeScale.isFlashToken)
+    }
+    let needsRope = sets.flatMap(\.exercises).contains { ex in
+      let type_ = exercises.first { $0.id == ex.exerciseId }?.difficultyType ?? "free_text"
+      return type_ == "rope" && ex.difficulties.contains(where: GradeScale.isFlashToken)
+    }
+
+    async let boulderMax = needsBoulder ? fetchMaxGradeIndex(isBoulder: true,  gymId: gymId, athleteId: athleteId) : nil
+    async let ropeMax    = needsRope    ? fetchMaxGradeIndex(isBoulder: false, gymId: gymId, athleteId: athleteId) : nil
+    let (bMax, rMax) = await (boulderMax, ropeMax)
+
+    return sets.map { draftSet in
+      var s = draftSet
+      s.exercises = s.exercises.map { ex in
+        var e = ex
+        let type_ = exercises.first { $0.id == e.exerciseId }?.difficultyType ?? "free_text"
+        guard type_ == "boulder" || type_ == "rope" else { return e }
+        let scale  = type_ == "boulder" ? GradeScale.boulder : GradeScale.rope
+        let maxIdx = type_ == "boulder" ? bMax : rMax
+        e.difficulties = e.difficulties.map { d in
+          guard GradeScale.isFlashToken(d), let max = maxIdx else { return d }
+          return GradeScale.resolveFlash(token: d, maxIndex: max, scale: scale)
+        }
+        return e
+      }
+      return s
+    }
+  }
+
+  private func fetchMaxGradeIndex(isBoulder: Bool, gymId: String, athleteId: String) async -> Double? {
+    struct CriteriaRow: Decodable { let id: String }
+    struct EvalRow: Decodable { let value: Double? }
+    do {
+      let col = isBoulder ? "is_max_boulder" : "is_max_rope"
+      let criteria: [CriteriaRow] = try await supabase
+        .from("assessment_criteria")
+        .select("id")
+        .eq("gym_id", value: gymId)
+        .eq(col, value: true)
+        .limit(1)
+        .execute()
+        .value
+      guard let cid = criteria.first?.id else { return nil }
+      let evals: [EvalRow] = try await supabase
+        .from("evaluations")
+        .select("value")
+        .eq("athlete_id", value: athleteId)
+        .eq("criteria_id", value: cid)
+        .order("evaluated_at", ascending: false)
+        .limit(1)
+        .execute()
+        .value
+      return evals.first?.value
+    } catch {
+      return nil
     }
   }
 
@@ -600,10 +666,12 @@ private struct SetExerciseInsert: Encodable {
 private struct ExerciseInsert: Encodable {
   let gymId: String
   let name: String
+  let difficultyType: String
 
   enum CodingKeys: String, CodingKey {
     case gymId = "gym_id"
     case name
+    case difficultyType = "difficulty_type"
   }
 }
 

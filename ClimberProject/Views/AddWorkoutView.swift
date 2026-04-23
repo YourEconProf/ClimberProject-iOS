@@ -330,13 +330,20 @@ struct AddWorkoutView: View {
       }
 
       if let editing {
-        try await vm.updateWorkout(editing, date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets)
+        let finalSets: [DraftSet]
+        if let athleteId = editing.athleteId {
+          finalSets = await vm.resolveFlashTokens(in: resolvedSets, athleteId: athleteId, gymId: gymId)
+        } else {
+          finalSets = resolvedSets
+        }
+        try await vm.updateWorkout(editing, date: dateStr, name: trimmedName, notes: trimmedNotes, sets: finalSets)
       } else {
         switch mode {
         case .athlete(let athleteId):
+          let flashResolved = await vm.resolveFlashTokens(in: resolvedSets, athleteId: athleteId, gymId: gymId)
           _ = try await vm.createWorkout(
             athleteId: athleteId, coachId: coachId, gymId: nil,
-            date: dateStr, name: trimmedName, notes: trimmedNotes, sets: resolvedSets
+            date: dateStr, name: trimmedName, notes: trimmedNotes, sets: flashResolved
           )
         case .template(let gId):
           _ = try await vm.createWorkout(
@@ -345,10 +352,11 @@ struct AddWorkoutView: View {
           )
         case .group(let athleteIds, _):
           for athleteId in athleteIds {
+            let flashResolved = await vm.resolveFlashTokens(in: resolvedSets, athleteId: athleteId, gymId: gymId)
             _ = try await vm.createWorkout(
               athleteId: athleteId, coachId: coachId, gymId: gymId,
               date: dateStr, name: trimmedName.isEmpty ? nil : trimmedName,
-              notes: trimmedNotes, sets: resolvedSets
+              notes: trimmedNotes, sets: flashResolved
             )
           }
         }
@@ -496,6 +504,18 @@ private struct ExerciseRowEditor: View {
   let library: [Exercise]
   let onDelete: () -> Void
 
+  private var difficultyType: String {
+    library.first { $0.id == ex.exerciseId }?.difficultyType ?? "free_text"
+  }
+
+  private var usesGradePicker: Bool {
+    difficultyType == "boulder" || difficultyType == "rope"
+  }
+
+  private var gradeScale: [String] {
+    difficultyType == "boulder" ? GradeScale.boulder : GradeScale.rope
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
@@ -529,8 +549,7 @@ private struct ExerciseRowEditor: View {
 
       if roundsCount <= 1 {
         HStack {
-          TextField("Difficulty (e.g. V4)", text: bindingForDifficulty(0))
-            .textFieldStyle(.roundedBorder)
+          difficultyInput(for: 0)
           TextField("Reps", text: bindingForReps(0))
             .textFieldStyle(.roundedBorder)
             .frame(maxWidth: 100)
@@ -542,8 +561,7 @@ private struct ExerciseRowEditor: View {
               Text("R\(r + 1)")
                 .font(.caption2).foregroundColor(.secondary)
                 .frame(width: 28, alignment: .leading)
-              TextField("Difficulty", text: bindingForDifficulty(r))
-                .textFieldStyle(.roundedBorder)
+              difficultyInput(for: r)
               TextField("Reps", text: bindingForReps(r))
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 90)
@@ -553,6 +571,31 @@ private struct ExerciseRowEditor: View {
       }
     }
     .padding(.vertical, 4)
+  }
+
+  @ViewBuilder
+  private func difficultyInput(for round: Int) -> some View {
+    if usesGradePicker {
+      Picker("", selection: bindingForDifficulty(round)) {
+        Text("—").tag("")
+        Section("Flash") {
+          ForEach(GradeScale.flashTokens, id: \.self) { token in
+            Text(token).tag(token)
+          }
+        }
+        Section("Grades") {
+          ForEach(gradeScale.reversed(), id: \.self) { grade in
+            Text(grade).tag(grade)
+          }
+        }
+      }
+      .pickerStyle(.menu)
+      .frame(maxWidth: .infinity)
+      .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+    } else {
+      TextField("Difficulty", text: bindingForDifficulty(round))
+        .textFieldStyle(.roundedBorder)
+    }
   }
 
   private var currentName: String {

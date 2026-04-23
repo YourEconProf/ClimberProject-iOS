@@ -26,6 +26,7 @@ struct SettingsView: View {
 
   @State private var newSetTypeName = ""
   @State private var newExerciseName = ""
+  @State private var newExerciseDifficultyType = "free_text"
   @State private var newProgramName = ""
   @State private var newCriteriaName = ""
   @State private var newCriteriaUnit = ""
@@ -116,14 +117,20 @@ struct SettingsView: View {
                 Spacer()
               }
               HStack(spacing: 8) {
-                flagToggle("FM", active: c.isFm) {
+                flagToggle("FM", active: c.isFm, color: .accentColor) {
                   Task { await evalVM.toggleFlag(.fm, for: c.id) }
                 }
-                flagToggle("Morpho", active: c.isMorpho) {
+                flagToggle("Morpho", active: c.isMorpho, color: .accentColor) {
                   Task { await evalVM.toggleFlag(.morpho, for: c.id) }
                 }
-                flagToggle("Strength", active: c.isStrength) {
+                flagToggle("Strength", active: c.isStrength, color: .accentColor) {
                   Task { await evalVM.toggleFlag(.strength, for: c.id) }
+                }
+                flagToggle("MaxB", active: c.isMaxBoulder, color: .orange) {
+                  Task { await evalVM.toggleFlag(.maxBoulder, for: c.id) }
+                }
+                flagToggle("MaxR", active: c.isMaxRope, color: .green) {
+                  Task { await evalVM.toggleFlag(.maxRope, for: c.id) }
                 }
               }
             }
@@ -185,7 +192,17 @@ struct SettingsView: View {
         // Exercises
         Section("Exercises") {
           ForEach(workoutVM.exercises) { ex in
-            Text(ex.name)
+            HStack {
+              Text(ex.name)
+              Spacer()
+              if let badge = exerciseTypeBadge(ex.difficultyType) {
+                Text(badge)
+                  .font(.caption2).bold()
+                  .padding(.horizontal, 6).padding(.vertical, 2)
+                  .background(Color.secondary.opacity(0.15))
+                  .clipShape(Capsule())
+              }
+            }
           }
           .onDelete { indices in
             Task {
@@ -196,14 +213,24 @@ struct SettingsView: View {
               }
             }
           }
-          HStack {
-            TextField("Add exercise…", text: $newExerciseName)
-              .focused($focusedField, equals: .exercise)
-              .submitLabel(.done)
-              .onSubmit { Task { await addExercise() } }
-            Button("Add") { Task { await addExercise() } }
-              .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              TextField("Add exercise…", text: $newExerciseName)
+                .focused($focusedField, equals: .exercise)
+                .submitLabel(.done)
+                .onSubmit { Task { await addExercise() } }
+              Button("Add") { Task { await addExercise() } }
+                .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            Picker("Type", selection: $newExerciseDifficultyType) {
+              Text("Free Text").tag("free_text")
+              Text("Boulder").tag("boulder")
+              Text("Rope").tag("rope")
+              Text("Weight").tag("weight")
+            }
+            .pickerStyle(.segmented)
           }
+          .padding(.vertical, 4)
           if let exerciseError {
             Text(exerciseError).foregroundColor(.red).font(.caption)
           }
@@ -252,13 +279,13 @@ struct SettingsView: View {
   }
 
   @ViewBuilder
-  private func flagToggle(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
+  private func flagToggle(_ label: String, active: Bool, color: Color = .accentColor, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(label)
         .font(.caption2).bold()
         .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(active ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.1))
-        .foregroundColor(active ? .accentColor : .secondary)
+        .background(active ? color.opacity(0.2) : Color.secondary.opacity(0.1))
+        .foregroundColor(active ? color : .secondary)
         .clipShape(Capsule())
     }
     .buttonStyle(.borderless)
@@ -314,11 +341,21 @@ struct SettingsView: View {
     guard !trimmed.isEmpty else { return }
     exerciseError = nil
     do {
-      _ = try await workoutVM.addExercise(gymId: gymId, name: trimmed)
+      _ = try await workoutVM.addExercise(gymId: gymId, name: trimmed, difficultyType: newExerciseDifficultyType)
       newExerciseName = ""
+      newExerciseDifficultyType = "free_text"
       focusedField = nil
     } catch {
       exerciseError = error.localizedDescription
+    }
+  }
+
+  private func exerciseTypeBadge(_ type: String) -> String? {
+    switch type {
+    case "boulder": return "Boulder"
+    case "rope":    return "Rope"
+    case "weight":  return "Weight"
+    default:        return nil
     }
   }
 

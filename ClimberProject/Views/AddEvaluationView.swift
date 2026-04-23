@@ -80,24 +80,52 @@ struct AddEvaluationView: View {
     if !visibleCriteria.isEmpty {
       Section {
         ForEach(visibleCriteria) { c in
-          HStack {
-            Text(c.name)
-            Spacer()
-            TextField("—", text: Binding(
-              get: { values[c.id] ?? "" },
-              set: { values[c.id] = $0 }
-            ))
-            .keyboardType(.decimalPad)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 80)
-            if let unit = c.unit {
-              Text(unit)
-                .foregroundColor(.secondary)
-                .font(.caption)
-                .frame(width: 30, alignment: .leading)
-            }
+          if c.isMaxBoulder || c.isMaxRope {
+            gradePickerRow(for: c)
+          } else {
+            numberInputRow(for: c)
           }
         }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func gradePickerRow(for c: AssessmentCriteria) -> some View {
+    let scale = c.isMaxBoulder ? GradeScale.boulder : GradeScale.rope
+    HStack {
+      Text(c.name)
+      Spacer()
+      Picker("", selection: Binding(
+        get: { values[c.id] ?? "" },
+        set: { values[c.id] = $0 }
+      )) {
+        Text("—").tag("")
+        ForEach(scale.reversed(), id: \.self) { grade in
+          Text(grade).tag(grade)
+        }
+      }
+      .labelsHidden()
+    }
+  }
+
+  @ViewBuilder
+  private func numberInputRow(for c: AssessmentCriteria) -> some View {
+    HStack {
+      Text(c.name)
+      Spacer()
+      TextField("—", text: Binding(
+        get: { values[c.id] ?? "" },
+        set: { values[c.id] = $0 }
+      ))
+      .keyboardType(.decimalPad)
+      .multilineTextAlignment(.trailing)
+      .frame(width: 80)
+      if let unit = c.unit {
+        Text(unit)
+          .foregroundColor(.secondary)
+          .font(.caption)
+          .frame(width: 30, alignment: .leading)
       }
     }
   }
@@ -156,7 +184,18 @@ struct AddEvaluationView: View {
     switch mode {
     case .fm, .morpho, .strength:
       inserts = values.compactMap { criteriaId, text in
-        guard let value = Double(text), !text.isEmpty else { return nil }
+        guard !text.isEmpty else { return nil }
+        let criteria = vm.criteria.first { $0.id == criteriaId }
+        let value: Double
+        if criteria?.isMaxBoulder == true, let idx = GradeScale.boulder.firstIndex(of: text) {
+          value = Double(idx)
+        } else if criteria?.isMaxRope == true, let idx = GradeScale.rope.firstIndex(of: text) {
+          value = Double(idx)
+        } else if let d = Double(text) {
+          value = d
+        } else {
+          return nil
+        }
         return EvaluationInsert(
           athleteId: athleteId, coachId: coachId,
           criteriaId: criteriaId, evaluatedAt: dateString,

@@ -120,10 +120,37 @@ class EvaluationViewModel: ObservableObject {
       case .strength:
         try await supabase.from("assessment_criteria")
           .update(StrengthPatch(isStrength: !c.isStrength)).eq("id", value: id).execute()
+      case .maxBoulder:
+        try await supabase.from("assessment_criteria")
+          .update(MaxBoulderPatch(isMaxBoulder: !c.isMaxBoulder)).eq("id", value: id).execute()
+      case .maxRope:
+        try await supabase.from("assessment_criteria")
+          .update(MaxRopePatch(isMaxRope: !c.isMaxRope)).eq("id", value: id).execute()
       }
       await fetchCriteria()
     } catch {
       self.error = error.localizedDescription
+    }
+  }
+
+  // Returns the athlete's most recent max grade index for boulder or rope.
+  // Used by flash token resolution when saving a workout to an athlete.
+  func fetchLatestMaxIndex(isMaxBoulder: Bool, athleteId: String) async -> Double? {
+    guard let c = criteria.first(where: { isMaxBoulder ? $0.isMaxBoulder : $0.isMaxRope }) else { return nil }
+    do {
+      struct Row: Decodable { let value: Double? }
+      let rows: [Row] = try await supabase
+        .from("evaluations")
+        .select("value")
+        .eq("athlete_id", value: athleteId)
+        .eq("criteria_id", value: c.id)
+        .order("evaluated_at", ascending: false)
+        .limit(1)
+        .execute()
+        .value
+      return rows.first?.value
+    } catch {
+      return nil
     }
   }
 }
@@ -143,7 +170,17 @@ private struct StrengthPatch: Encodable {
   enum CodingKeys: String, CodingKey { case isStrength = "is_strength" }
 }
 
-enum CriteriaFlag { case fm, morpho, strength }
+private struct MaxBoulderPatch: Encodable {
+  let isMaxBoulder: Bool
+  enum CodingKeys: String, CodingKey { case isMaxBoulder = "is_max_boulder" }
+}
+
+private struct MaxRopePatch: Encodable {
+  let isMaxRope: Bool
+  enum CodingKeys: String, CodingKey { case isMaxRope = "is_max_rope" }
+}
+
+enum CriteriaFlag { case fm, morpho, strength, maxBoulder, maxRope }
 
 struct EvaluationInsert: Encodable {
   let athleteId: String

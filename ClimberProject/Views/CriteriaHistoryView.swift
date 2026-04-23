@@ -32,6 +32,8 @@ struct CriteriaHistoryView: View {
 
   private func valueString(_ value: Double?) -> String {
     guard let value else { return "—" }
+    if criteria.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
+    if criteria.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
     let formatted = value.truncatingRemainder(dividingBy: 1) == 0
       ? String(format: "%.0f", value)
       : String(format: "%.1f", value)

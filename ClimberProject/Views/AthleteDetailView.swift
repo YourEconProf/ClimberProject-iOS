@@ -185,7 +185,7 @@ struct AthleteDetailView: View {
               Spacer()
               if let latest = evalVM.latestValue(for: c.id) {
                 VStack(alignment: .trailing, spacing: 2) {
-                  Text(formatValue(latest.value, unit: c.unit))
+                  Text(formatValue(latest.value, criteria: c))
                     .foregroundColor(.secondary)
                   Text(latest.evaluatedAt.displayDate)
                     .font(.caption2)
@@ -199,12 +199,14 @@ struct AthleteDetailView: View {
     }
   }
 
-  private func formatValue(_ value: Double?, unit: String?) -> String {
+  private func formatValue(_ value: Double?, criteria: AssessmentCriteria) -> String {
     guard let value else { return "—" }
+    if criteria.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
+    if criteria.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
     let formatted = value.truncatingRemainder(dividingBy: 1) == 0
       ? String(format: "%.0f", value)
       : String(format: "%.1f", value)
-    if let unit { return "\(formatted) \(unit)" }
+    if let unit = criteria.unit { return "\(formatted) \(unit)" }
     return formatted
   }
 

@@ -23,9 +23,8 @@ struct WorkoutSetExercise: Codable, Identifiable {
     case exercise = "exercises"
   }
 
-  var displayName: String {
-    exercise?.name ?? "Custom"
-  }
+  var displayName: String { exercise?.name ?? "Custom" }
+  var difficultyType: String { exercise?.difficultyType ?? "free_text" }
 
   /// Always returns at least one element. Falls back to scalar `difficulty` for pre-rounds rows.
   func effectiveDifficulties(roundsCount: Int) -> [String] {
@@ -51,4 +50,10 @@ struct WorkoutSetExercise: Codable, Identifiable {
 
 struct EmbeddedExercise: Codable {
   let name: String?
+  let difficultyType: String?
+
+  enum CodingKeys: String, CodingKey {
+    case name
+    case difficultyType = "difficulty_type"
+  }
 }

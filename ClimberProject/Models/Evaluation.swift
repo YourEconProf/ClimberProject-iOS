@@ -30,6 +30,8 @@ struct AssessmentCriteria: Codable, Identifiable {
   let isFm: Bool
   let isMorpho: Bool
   let isStrength: Bool
+  let isMaxBoulder: Bool
+  let isMaxRope: Bool
   let createdAt: String
 
   enum CodingKeys: String, CodingKey {
@@ -40,6 +42,22 @@ struct AssessmentCriteria: Codable, Identifiable {
     case isFm = "is_fm"
     case isMorpho = "is_morpho"
     case isStrength = "is_strength"
+    case isMaxBoulder = "is_max_boulder"
+    case isMaxRope = "is_max_rope"
     case createdAt = "created_at"
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id           = try c.decode(String.self,          forKey: .id)
+    gymId        = try c.decode(String.self,          forKey: .gymId)
+    name         = try c.decode(String.self,          forKey: .name)
+    unit         = try c.decodeIfPresent(String.self, forKey: .unit)
+    isFm         = try c.decodeIfPresent(Bool.self,   forKey: .isFm)         ?? false
+    isMorpho     = try c.decodeIfPresent(Bool.self,   forKey: .isMorpho)     ?? false
+    isStrength   = try c.decodeIfPresent(Bool.self,   forKey: .isStrength)   ?? false
+    isMaxBoulder = try c.decodeIfPresent(Bool.self,   forKey: .isMaxBoulder) ?? false
+    isMaxRope    = try c.decodeIfPresent(Bool.self,   forKey: .isMaxRope)    ?? false
+    createdAt    = try c.decode(String.self,          forKey: .createdAt)
   }
 }

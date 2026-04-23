@@ -98,7 +98,7 @@ struct EvaluationHistoryView: View {
               Text(evaluation.evaluatedAt.displayDate)
                 .foregroundColor(.secondary)
               Spacer()
-              Text(formatValue(evaluation.value, unit: criteria.unit))
+              Text(formatValue(evaluation.value, criteria: criteria))
                 .fontWeight(.medium)
             }
           }
@@ -138,7 +138,7 @@ struct EvaluationHistoryView: View {
               .padding(.horizontal, 8).padding(.vertical, 6)
               .background(idx % 2 == 1 ? Color(UIColor.tertiarySystemBackground) : Color.clear)
             ForEach(tableDates, id: \.self) { date in
-              Text(cellValue(criteriaId: c.id, date: date, unit: c.unit))
+              Text(cellValue(criteria: c, date: date))
                 .font(.caption).foregroundColor(.secondary)
                 .frame(width: 80, alignment: .center)
                 .padding(.horizontal, 4).padding(.vertical, 6)
@@ -154,20 +154,22 @@ struct EvaluationHistoryView: View {
 
   // MARK: - Helpers
 
-  private func cellValue(criteriaId: String, date: String, unit: String?) -> String {
+  private func cellValue(criteria: AssessmentCriteria, date: String) -> String {
     let matches = vm.evaluations.filter {
-      $0.criteriaId == criteriaId && $0.evaluatedAt.hasPrefix(date)
+      $0.criteriaId == criteria.id && $0.evaluatedAt.hasPrefix(date)
     }
     guard let best = matches.max(by: { $0.evaluatedAt < $1.evaluatedAt }) else { return "—" }
-    return formatValue(best.value, unit: unit)
+    return formatValue(best.value, criteria: criteria)
   }
 
-  private func formatValue(_ value: Double?, unit: String?) -> String {
+  private func formatValue(_ value: Double?, criteria: AssessmentCriteria) -> String {
     guard let value else { return "—" }
+    if criteria.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
+    if criteria.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
     let formatted = value.truncatingRemainder(dividingBy: 1) == 0
       ? String(format: "%.0f", value)
       : String(format: "%.1f", value)
-    if let unit { return "\(formatted) \(unit)" }
+    if let unit = criteria.unit { return "\(formatted) \(unit)" }
     return formatted
   }
 }
