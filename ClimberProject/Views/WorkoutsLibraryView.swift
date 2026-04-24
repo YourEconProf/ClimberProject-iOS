@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorkoutsLibraryView: View {
   @StateObject private var vm = WorkoutViewModel()
+  @StateObject private var tagVM = TagViewModel()
   @EnvironmentObject var authVM: AuthViewModel
 
   @State private var previewing: Workout?
@@ -10,11 +11,14 @@ struct WorkoutsLibraryView: View {
   @State private var showGroupSheet = false
   @State private var expanded: Set<String> = []
   @State private var search: String = ""
+  @State private var selectedTagIds: Set<String> = []
 
   var filtered: [Workout] {
-    guard !search.isEmpty else { return vm.namedWorkouts }
-    return vm.namedWorkouts.filter {
-      ($0.name ?? "").localizedCaseInsensitiveContains(search)
+    let searchFiltered = search.isEmpty ? vm.namedWorkouts :
+      vm.namedWorkouts.filter { ($0.name ?? "").localizedCaseInsensitiveContains(search) }
+    guard !selectedTagIds.isEmpty else { return searchFiltered }
+    return searchFiltered.filter { workout in
+      tagVM.tagsForWorkout(workout.id).contains(where: { selectedTagIds.contains($0.id) })
     }
   }
 
@@ -31,13 +35,44 @@ struct WorkoutsLibraryView: View {
           .padding()
         } else {
           List {
+            if !tagVM.tags.isEmpty {
+              Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                  HStack(spacing: 8) {
+                    ForEach(tagVM.tags) { tag in
+                      Button {
+                        if selectedTagIds.contains(tag.id) {
+                          selectedTagIds.remove(tag.id)
+                        } else {
+                          selectedTagIds.insert(tag.id)
+                        }
+                      } label: {
+                        Text(tag.name)
+                          .font(.caption)
+                          .padding(.horizontal, 10).padding(.vertical, 5)
+                          .background(selectedTagIds.contains(tag.id) ? Color.accentColor : Color.secondary.opacity(0.15))
+                          .foregroundColor(selectedTagIds.contains(tag.id) ? .white : .primary)
+                          .clipShape(Capsule())
+                      }
+                      .buttonStyle(.plain)
+                    }
+                  }
+                  .padding(.vertical, 4)
+                }
+              }
+            }
             ForEach(filtered) { w in
               LibraryCard(
                 workout: w,
                 isExpanded: expanded.contains(w.id),
                 onToggle: { toggle(w.id) },
                 onPreview: { previewing = w },
-                onCopy: { copying = w }
+                onCopy: { copying = w },
+                workoutTags: tagVM.tagsForWorkout(w.id),
+                allTags: tagVM.tags,
+                onToggleTag: { tagId in
+                  Task { try? await tagVM.toggleWorkoutTag(workoutId: w.id, tagId: tagId) }
+                }
               )
               .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
@@ -70,8 +105,9 @@ struct WorkoutsLibraryView: View {
       .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
       .task {
         await vm.fetchNamedWorkouts()
-        if let gymId = authVM.currentCoach?.gymId, vm.exercises.isEmpty {
-          await vm.fetchExercises(gymId: gymId)
+        if let gymId = authVM.currentCoach?.gymId {
+          if vm.exercises.isEmpty { await vm.fetchExercises(gymId: gymId) }
+          await tagVM.fetch(gymId: gymId)
         }
       }
       .refreshable { await vm.fetchNamedWorkouts() }
@@ -113,6 +149,9 @@ private struct LibraryCard: View {
   let onToggle: () -> Void
   let onPreview: () -> Void
   let onCopy: () -> Void
+  let workoutTags: [Tag]
+  let allTags: [Tag]
+  let onToggleTag: (String) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -150,6 +189,35 @@ private struct LibraryCard: View {
             .foregroundColor(.secondary)
         }
         .buttonStyle(.borderless)
+      }
+
+      if !allTags.isEmpty {
+        HStack(spacing: 6) {
+          ForEach(workoutTags) { tag in
+            Text(tag.name)
+              .font(.caption2)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.accentColor.opacity(0.15))
+              .foregroundColor(.accentColor)
+              .clipShape(Capsule())
+          }
+          Menu {
+            ForEach(allTags) { tag in
+              Button {
+                onToggleTag(tag.id)
+              } label: {
+                Label(tag.name, systemImage: workoutTags.contains(tag) ? "checkmark" : "")
+              }
+            }
+          } label: {
+            Text("+ tag")
+              .font(.caption2)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.secondary.opacity(0.1))
+              .foregroundColor(.secondary)
+              .clipShape(Capsule())
+          }
+        }
       }
 
       if isExpanded {

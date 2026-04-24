@@ -27,12 +27,15 @@ struct AddWorkoutView: View {
 
   @Environment(\.dismiss) private var dismiss
 
+  @StateObject private var tagVM = TagViewModel()
+
   @State private var date: Date = Date()
   @State private var name: String = ""
   @State private var notes: String = ""
   @State private var sets: [DraftSet] = []
   @State private var isSaving = false
   @State private var error: String?
+  @State private var filterTagIds: Set<String> = []
 
   // Template autocomplete (template mode only)
   @State private var showingTemplateSuggestions = false
@@ -54,6 +57,13 @@ struct AddWorkoutView: View {
     f.locale = Locale(identifier: "en_US_POSIX")
     return f
   }()
+
+  private var filteredLibrary: [Exercise] {
+    guard !filterTagIds.isEmpty else { return vm.exercises }
+    return vm.exercises.filter { ex in
+      tagVM.tagsForExercise(ex.id).contains(where: { filterTagIds.contains($0.id) })
+    }
+  }
 
   private var titleString: String {
     if editing != nil { return mode.isTemplate ? "Edit Template" : "Edit Workout" }
@@ -123,6 +133,34 @@ struct AddWorkoutView: View {
           }
         }
 
+        // Exercise tag filter
+        if !tagVM.tags.isEmpty {
+          Section("Filter Exercises") {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
+                ForEach(tagVM.tags) { tag in
+                  Button {
+                    if filterTagIds.contains(tag.id) {
+                      filterTagIds.remove(tag.id)
+                    } else {
+                      filterTagIds.insert(tag.id)
+                    }
+                  } label: {
+                    Text(tag.name)
+                      .font(.caption)
+                      .padding(.horizontal, 10).padding(.vertical, 5)
+                      .background(filterTagIds.contains(tag.id) ? Color.accentColor : Color.secondary.opacity(0.15))
+                      .foregroundColor(filterTagIds.contains(tag.id) ? .white : .primary)
+                      .clipShape(Capsule())
+                  }
+                  .buttonStyle(.plain)
+                }
+              }
+              .padding(.vertical, 4)
+            }
+          }
+        }
+
         // Sets
         ForEach($sets) { $draftSet in
           Section {
@@ -153,12 +191,22 @@ struct AddWorkoutView: View {
               }
 
             ForEach($draftSet.exercises) { $ex in
+              let idx = draftSet.exercises.firstIndex(where: { $0.id == ex.id }) ?? 0
               ExerciseRowEditor(
                 ex: $ex,
                 roundsCount: draftSet.roundsCount,
-                library: vm.exercises,
-                onDelete: {
-                  draftSet.exercises.removeAll { $0.id == ex.id }
+                library: filteredLibrary,
+                onDelete: { draftSet.exercises.removeAll { $0.id == ex.id } },
+                showMoveButtons: draftSet.exercises.count > 1,
+                canMoveUp: idx > 0,
+                canMoveDown: idx < draftSet.exercises.count - 1,
+                onMoveUp: {
+                  guard idx > 0 else { return }
+                  draftSet.exercises.swapAt(idx, idx - 1)
+                },
+                onMoveDown: {
+                  guard idx < draftSet.exercises.count - 1 else { return }
+                  draftSet.exercises.swapAt(idx, idx + 1)
                 }
               )
             }
@@ -230,6 +278,7 @@ struct AddWorkoutView: View {
         if vm.setTypes.isEmpty { await vm.fetchSetTypes(gymId: gymId) }
         if vm.exercises.isEmpty { await vm.fetchExercises(gymId: gymId) }
         if vm.namedWorkouts.isEmpty { await vm.fetchNamedWorkouts() }
+        await tagVM.fetch(gymId: gymId)
       }
       .sheet(isPresented: $showingTemplatePicker) {
         TemplatePickerSheet(templates: vm.namedWorkouts) { template in
@@ -503,6 +552,11 @@ private struct ExerciseRowEditor: View {
   let roundsCount: Int
   let library: [Exercise]
   let onDelete: () -> Void
+  let showMoveButtons: Bool
+  let canMoveUp: Bool
+  let canMoveDown: Bool
+  let onMoveUp: () -> Void
+  let onMoveDown: () -> Void
 
   private var difficultyType: String {
     library.first { $0.id == ex.exerciseId }?.difficultyType ?? "free_text"
@@ -519,6 +573,21 @@ private struct ExerciseRowEditor: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
+        if showMoveButtons {
+          VStack(spacing: 2) {
+            Button(action: onMoveUp) {
+              Image(systemName: "chevron.up").font(.caption2)
+            }
+            .disabled(!canMoveUp)
+            .buttonStyle(.borderless)
+            Button(action: onMoveDown) {
+              Image(systemName: "chevron.down").font(.caption2)
+            }
+            .disabled(!canMoveDown)
+            .buttonStyle(.borderless)
+          }
+          .foregroundColor(.secondary)
+        }
         Menu {
           Button("Custom…") { ex.exerciseId = nil }
           Divider()

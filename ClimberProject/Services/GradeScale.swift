@@ -7,17 +7,18 @@ enum GradeScale {
                         "5.12-","5.12","5.12+","5.13-","5.13","5.13+",
                         "5.14-","5.14","5.14+"]
 
-  static let flashTokens = ["[flash]", "[flash-1]", "[flash-2]"]
+  static let flashTokens = ["[flash]", "[flash-1]", "[flash-2]", "[flash-3]"]
 
   static func isFlashToken(_ s: String) -> Bool { flashTokens.contains(s) }
 
-  // offset: 0=[flash], 1=[flash-1], 2=[flash-2]
+  // offset: 0=[flash], 1=[flash-1], 2=[flash-2], 3=[flash-3]
   static func resolveFlash(token: String, maxIndex: Double, scale: [String]) -> String {
     let offset: Int
     switch token {
     case "[flash]":   offset = 0
     case "[flash-1]": offset = 1
     case "[flash-2]": offset = 2
+    case "[flash-3]": offset = 3
     default:          return token
     }
     let idx = max(0, Int(maxIndex.rounded()) - offset)

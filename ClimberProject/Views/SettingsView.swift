@@ -23,6 +23,7 @@ struct SettingsView: View {
   @StateObject private var workoutVM = WorkoutViewModel()
   @StateObject private var programVM = ProgramViewModel()
   @StateObject private var evalVM = EvaluationViewModel()
+  @StateObject private var tagVM = TagViewModel()
 
   @State private var newSetTypeName = ""
   @State private var newExerciseName = ""
@@ -31,6 +32,8 @@ struct SettingsView: View {
   @State private var newCriteriaName = ""
   @State private var newCriteriaUnit = ""
 
+  @State private var newTagName = ""
+  @State private var tagError: String?
   @State private var setTypeError: String?
   @State private var exerciseError: String?
   @State private var programError: String?
@@ -38,7 +41,7 @@ struct SettingsView: View {
 
   @FocusState private var focusedField: Field?
 
-  private enum Field { case setType, exercise, program, criteria }
+  private enum Field { case tag, setType, exercise, program, criteria }
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -189,20 +192,44 @@ struct SettingsView: View {
           }
         }
 
+        // Tags
+        Section("Tags") {
+          ForEach(tagVM.tags) { tag in
+            Text(tag.name)
+          }
+          .onDelete { indices in
+            Task {
+              for i in indices {
+                do { try await tagVM.deleteTag(id: tagVM.tags[i].id) }
+                catch { tagError = error.localizedDescription }
+              }
+            }
+          }
+          HStack {
+            TextField("Add tag…", text: $newTagName)
+              .focused($focusedField, equals: .tag)
+              .submitLabel(.done)
+              .onSubmit { Task { await addTag() } }
+            Button("Add") { Task { await addTag() } }
+              .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+          if let tagError {
+            Text(tagError).foregroundColor(.red).font(.caption)
+          }
+        }
+
         // Exercises
         Section("Exercises") {
           ForEach(workoutVM.exercises) { ex in
-            HStack {
-              Text(ex.name)
-              Spacer()
-              if let badge = exerciseTypeBadge(ex.difficultyType) {
-                Text(badge)
-                  .font(.caption2).bold()
-                  .padding(.horizontal, 6).padding(.vertical, 2)
-                  .background(Color.secondary.opacity(0.15))
-                  .clipShape(Capsule())
+            ExerciseSettingsRow(
+              exercise: ex,
+              exerciseTags: tagVM.tagsForExercise(ex.id),
+              allTags: tagVM.tags,
+              badge: exerciseTypeBadge(ex.difficultyType),
+              onToggleTag: { tagId in
+                Task { try? await tagVM.toggleExerciseTag(exerciseId: ex.id, tagId: tagId) }
               }
-            }
+            )
           }
           .onDelete { indices in
             Task {
@@ -271,6 +298,7 @@ struct SettingsView: View {
         if let gymId = authVM.currentCoach?.gymId {
           await setTypeVM.fetch(gymId: gymId)
           await workoutVM.fetchExercises(gymId: gymId)
+          await tagVM.fetch(gymId: gymId)
         }
         await programVM.fetchPrograms()
         await evalVM.fetchCriteria()
@@ -289,6 +317,20 @@ struct SettingsView: View {
         .clipShape(Capsule())
     }
     .buttonStyle(.borderless)
+  }
+
+  private func addTag() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    let trimmed = newTagName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    tagError = nil
+    do {
+      try await tagVM.addTag(gymId: gymId, name: trimmed)
+      newTagName = ""
+      focusedField = nil
+    } catch {
+      tagError = error.localizedDescription
+    }
   }
 
   private func addProgram() async {
@@ -387,5 +429,58 @@ struct SettingsView: View {
     case "admin":      return .purple
     default:           return .secondary
     }
+  }
+}
+
+private struct ExerciseSettingsRow: View {
+  let exercise: Exercise
+  let exerciseTags: [Tag]
+  let allTags: [Tag]
+  let badge: String?
+  let onToggleTag: (String) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        Text(exercise.name)
+        Spacer()
+        if let badge {
+          Text(badge)
+            .font(.caption2).bold()
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15))
+            .clipShape(Capsule())
+        }
+      }
+      if !allTags.isEmpty {
+        HStack(spacing: 6) {
+          ForEach(exerciseTags) { tag in
+            Text(tag.name)
+              .font(.caption2)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.accentColor.opacity(0.15))
+              .foregroundColor(.accentColor)
+              .clipShape(Capsule())
+          }
+          Menu {
+            ForEach(allTags) { tag in
+              Button {
+                onToggleTag(tag.id)
+              } label: {
+                Label(tag.name, systemImage: exerciseTags.contains(tag) ? "checkmark" : "")
+              }
+            }
+          } label: {
+            Text("+ tag")
+              .font(.caption2)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.secondary.opacity(0.1))
+              .foregroundColor(.secondary)
+              .clipShape(Capsule())
+          }
+        }
+      }
+    }
+    .padding(.vertical, 2)
   }
 }
