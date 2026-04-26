@@ -9,6 +9,8 @@ struct Workout: Codable, Identifiable {
   let name: String?
   let templateName: String?
   let notes: String?
+  let status: String?      // draft | approved | completed; nil = pre-feature rows
+  let plannedFor: String?  // date the AI generated this workout for
   var sets: [WorkoutSet]?
   var coach: EmbeddedCoach?
   var athlete: EmbeddedAthlete?
@@ -22,6 +24,8 @@ struct Workout: Codable, Identifiable {
     case name
     case templateName = "template_name"
     case notes
+    case status
+    case plannedFor = "planned_for"
     case sets = "workout_sets"
     case coach = "coaches"
     case athlete = "athletes"
@@ -38,6 +42,9 @@ struct Workout: Codable, Identifiable {
   var isTemplate: Bool {
     athleteId == nil && gymId != nil
   }
+
+  var isDraft: Bool { status == "draft" }
+  var isCompleted: Bool { status == "completed" }
 
   var displayTitle: String {
     templateName ?? name ?? (athlete?.displayName ?? (isTemplate ? "Workout Template" : "Workout"))

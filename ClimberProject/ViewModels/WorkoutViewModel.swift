@@ -95,25 +95,27 @@ class WorkoutViewModel: ObservableObject {
     isLoading = true
     defer { isLoading = false }
     do {
-      // Fetch workouts that have either a name (athlete) or template_name (template)
-      let byName = try await supabase
-        .from("workouts")
-        .select(workoutSelectWithNesting)
-        .not("name", operator: .is, value: "null")
-        .execute()
+      // Fetch all unassigned workouts: template_name-based and name-based (no athlete)
       let byTemplateName = try await supabase
         .from("workouts")
         .select(workoutSelectWithNesting)
         .not("template_name", operator: .is, value: "null")
         .execute()
+      let byName = try await supabase
+        .from("workouts")
+        .select(workoutSelectWithNesting)
+        .not("name", operator: .is, value: "null")
+        .execute()
       do {
-        let named = try decoder.decode([Workout].self, from: byName.data)
         let templates = try decoder.decode([Workout].self, from: byTemplateName.data)
-        var combined = named + templates.filter { t in !named.contains(where: { $0.id == t.id }) }
+        let named = try decoder.decode([Workout].self, from: byName.data)
+        // Only include name-based workouts that have no athlete assigned
+        let unassigned = named.filter { $0.athleteId == nil }
+        var combined = templates + unassigned.filter { u in !templates.contains(where: { $0.id == u.id }) }
         combined.sort { $0.displayTitle < $1.displayTitle }
         namedWorkouts = combined
       } catch {
-        let raw = String(data: byName.data, encoding: .utf8) ?? "<non-utf8>"
+        let raw = String(data: byTemplateName.data, encoding: .utf8) ?? "<non-utf8>"
         print("[Workouts] named decode error: \(error)")
         print("[Workouts] named raw JSON: \(raw)")
       }
@@ -286,7 +288,8 @@ class WorkoutViewModel: ObservableObject {
       workouts[idx] = Workout(
         id: w.id, athleteId: w.athleteId, coachId: w.coachId, gymId: w.gymId,
         workoutDate: w.workoutDate, name: w.name, templateName: w.templateName,
-        notes: patch.notes, sets: w.sets, coach: w.coach, athlete: w.athlete
+        notes: patch.notes, status: w.status, plannedFor: w.plannedFor,
+        sets: w.sets, coach: w.coach, athlete: w.athlete
       )
     }
     if let idx = namedWorkouts.firstIndex(where: { $0.id == id }) {
@@ -294,7 +297,8 @@ class WorkoutViewModel: ObservableObject {
       namedWorkouts[idx] = Workout(
         id: w.id, athleteId: w.athleteId, coachId: w.coachId, gymId: w.gymId,
         workoutDate: w.workoutDate, name: w.name, templateName: w.templateName,
-        notes: patch.notes, sets: w.sets, coach: w.coach, athlete: w.athlete
+        notes: patch.notes, status: w.status, plannedFor: w.plannedFor,
+        sets: w.sets, coach: w.coach, athlete: w.athlete
       )
     }
   }
