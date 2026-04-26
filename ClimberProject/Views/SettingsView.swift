@@ -28,7 +28,6 @@ struct SettingsView: View {
   @State private var newSetTypeName = ""
   @State private var newExerciseName = ""
   @State private var newExerciseDifficultyType = "free_text"
-  @State private var newProgramName = ""
   @State private var newCriteriaName = ""
   @State private var newCriteriaUnit = ""
 
@@ -36,12 +35,11 @@ struct SettingsView: View {
   @State private var tagError: String?
   @State private var setTypeError: String?
   @State private var exerciseError: String?
-  @State private var programError: String?
   @State private var criteriaError: String?
 
   @FocusState private var focusedField: Field?
 
-  private enum Field { case tag, setType, exercise, program, criteria }
+  private enum Field { case tag, setType, exercise, criteria }
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -86,21 +84,9 @@ struct SettingsView: View {
             Task {
               for i in indices {
                 let id = programVM.programs[i].id
-                do { try await programVM.deleteProgram(id: id) }
-                catch { programError = error.localizedDescription }
+                try? await programVM.deleteProgram(id: id)
               }
             }
-          }
-          HStack {
-            TextField("Add program…", text: $newProgramName)
-              .focused($focusedField, equals: .program)
-              .submitLabel(.done)
-              .onSubmit { Task { await addProgram() } }
-            Button("Add") { Task { await addProgram() } }
-              .disabled(newProgramName.trimmingCharacters(in: .whitespaces).isEmpty)
-          }
-          if let programError {
-            Text(programError).foregroundColor(.red).font(.caption)
           }
         }
 
@@ -327,19 +313,6 @@ struct SettingsView: View {
     }
   }
 
-  private func addProgram() async {
-    guard let gymId = authVM.currentCoach?.gymId else { return }
-    let trimmed = newProgramName.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else { return }
-    programError = nil
-    do {
-      try await programVM.addProgram(gymId: gymId, name: trimmed)
-      newProgramName = ""
-      focusedField = nil
-    } catch {
-      programError = error.localizedDescription
-    }
-  }
 
   private func addCriteria() async {
     guard let gymId = authVM.currentCoach?.gymId else { return }

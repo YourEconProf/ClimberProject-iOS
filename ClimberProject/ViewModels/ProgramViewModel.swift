@@ -52,14 +52,7 @@ class ProgramViewModel: ObservableObject {
 
   func enroll(athleteId: String, programId: String) async throws {
     let today = todayString()
-    // Delete any existing enrollment (including previously dropped) then re-insert
-    try await supabase
-      .from("athlete_programs")
-      .delete()
-      .eq("athlete_id", value: athleteId)
-      .eq("program_id", value: programId)
-      .execute()
-    struct Insert: Encodable {
+    struct Upsert: Encodable {
       let athleteId: String
       let programId: String
       let enrolledAt: String
@@ -67,11 +60,19 @@ class ProgramViewModel: ObservableObject {
         case athleteId = "athlete_id"
         case programId = "program_id"
         case enrolledAt = "enrolled_at"
+        case droppedAt = "dropped_at"
+      }
+      func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(athleteId, forKey: .athleteId)
+        try c.encode(programId, forKey: .programId)
+        try c.encode(enrolledAt, forKey: .enrolledAt)
+        try c.encodeNil(forKey: .droppedAt)  // must be explicit null, not omitted
       }
     }
     try await supabase
       .from("athlete_programs")
-      .insert(Insert(athleteId: athleteId, programId: programId, enrolledAt: today))
+      .upsert(Upsert(athleteId: athleteId, programId: programId, enrolledAt: today))
       .execute()
     await fetchEnrollments(athleteId: athleteId)
   }

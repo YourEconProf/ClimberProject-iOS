@@ -10,7 +10,6 @@ struct AthleteDetailView: View {
   @StateObject private var competitionVM = CompetitionViewModel()
   @StateObject private var programVM = ProgramViewModel()
 
-  @State private var showEnrollSheet = false
 
   var fmCriteria: [AssessmentCriteria] {
     evalVM.criteria.filter { $0.isFm && evalVM.latestValue(for: $0.id) != nil }
@@ -111,23 +110,12 @@ struct AthleteDetailView: View {
       Section("Programs") {
         ForEach(programVM.enrollments) { enrollment in
           let name = programVM.programs.first { $0.id == enrollment.programId }?.name ?? "Unknown"
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(name).font(.subheadline)
-              Text("Since \(enrollment.enrolledAt.displayDate)")
-                .font(.caption).foregroundColor(.secondary)
-            }
-            Spacer()
-            Button {
-              Task { try? await programVM.drop(athleteId: athlete.id, programId: enrollment.programId) }
-            } label: {
-              Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
-            }
-            .buttonStyle(.borderless)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(name).font(.subheadline)
+            Text("Since \(enrollment.enrolledAt.displayDate)")
+              .font(.caption).foregroundColor(.secondary)
           }
         }
-        Button("Enroll in Program…") { showEnrollSheet = true }
-          .foregroundColor(.accentColor)
       }
 
       // Personal Info
@@ -157,9 +145,7 @@ struct AthleteDetailView: View {
     }
     .navigationTitle(athlete.displayName)
     .navigationBarTitleDisplayMode(.inline)
-    .sheet(isPresented: $showEnrollSheet) {
-      EnrollProgramSheet(athlete: athlete, programVM: programVM)
-    }
+
     .task {
       await withTaskGroup(of: Void.self) { group in
         group.addTask { await noteVM.fetchNotes(athleteId: athlete.id) }
@@ -223,43 +209,3 @@ struct AthleteDetailView: View {
   }
 }
 
-// MARK: - Enroll Sheet
-
-private struct EnrollProgramSheet: View {
-  let athlete: Athlete
-  @ObservedObject var programVM: ProgramViewModel
-  @Environment(\.dismiss) var dismiss
-
-  private var available: [Program] {
-    let enrolledIds = Set(programVM.enrollments.map { $0.programId })
-    return programVM.programs.filter { !enrolledIds.contains($0.id) }
-  }
-
-  var body: some View {
-    NavigationStack {
-      Group {
-        if available.isEmpty {
-          ContentUnavailableView("All Programs Enrolled",
-            systemImage: "checkmark.circle",
-            description: Text("This athlete is enrolled in all available programs."))
-        } else {
-          List(available) { program in
-            Button(program.name) {
-              Task {
-                try? await programVM.enroll(athleteId: athlete.id, programId: program.id)
-                dismiss()
-              }
-            }
-          }
-        }
-      }
-      .navigationTitle("Enroll in Program")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
-      }
-    }
-  }
-}
