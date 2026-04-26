@@ -129,12 +129,6 @@ struct SettingsView: View {
                 flagToggle("Strength", active: c.isStrength, color: .accentColor) {
                   Task { await evalVM.toggleFlag(.strength, for: c.id) }
                 }
-                flagToggle("MaxB", active: c.isMaxBoulder, color: .orange) {
-                  Task { await evalVM.toggleFlag(.maxBoulder, for: c.id) }
-                }
-                flagToggle("MaxR", active: c.isMaxRope, color: .green) {
-                  Task { await evalVM.toggleFlag(.maxRope, for: c.id) }
-                }
               }
             }
             .padding(.vertical, 2)
