@@ -333,6 +333,28 @@ class WorkoutViewModel: ObservableObject {
     )
   }
 
+  // MARK: - Approve
+
+  func approveWorkout(id: String) async throws {
+    struct Patch: Encodable {
+      let status: String
+    }
+    try await supabase
+      .from("workouts")
+      .update(Patch(status: "approved"))
+      .eq("id", value: id)
+      .execute()
+    if let idx = workouts.firstIndex(where: { $0.id == id }) {
+      let w = workouts[idx]
+      workouts[idx] = Workout(
+        id: w.id, athleteId: w.athleteId, coachId: w.coachId, gymId: w.gymId,
+        workoutDate: w.workoutDate, name: w.name, templateName: w.templateName,
+        notes: w.notes, status: "approved", plannedFor: w.plannedFor,
+        sets: w.sets, coach: w.coach, athlete: w.athlete
+      )
+    }
+  }
+
   // MARK: - Delete
 
   func deleteWorkout(id: String) async throws {

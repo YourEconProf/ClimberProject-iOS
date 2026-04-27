@@ -29,7 +29,8 @@ struct AthleteWorkoutHistoryView: View {
               isExpanded: expanded.contains(workout.id),
               onToggle: { toggle(workout.id) },
               onEdit: { editingWorkout = workout },
-              onQuickNote: { quickNotesWorkout = workout }
+              onQuickNote: { quickNotesWorkout = workout },
+              onApprove: workout.isDraft ? { Task { try await vm.approveWorkout(id: workout.id) } } : nil
             )
             .swipeActions(edge: .trailing) {
               Button(role: .destructive) {
@@ -97,22 +98,30 @@ private struct WorkoutRow: View {
   let onToggle: () -> Void
   let onEdit: () -> Void
   let onQuickNote: () -> Void
+  let onApprove: (() async throws -> Void)?
 
   @State private var shareURL: IdentifiableURL?
+  @State private var approveError: String?
+  @State private var isApproving = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 6) {
-            Text(workout.workoutDate.displayDateWithWeekday)
-              .font(.subheadline).bold()
-            if let name = workout.name ?? workout.templateName {
-              Text(": \(name)")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            }
+          Text(workout.workoutDate.displayDateWithWeekday)
+            .font(.subheadline).bold()
+          if let name = workout.name ?? workout.templateName {
+            Text(name)
+              .font(.subheadline)
+              .foregroundColor(.secondary)
+          }
+          if workout.isDraft {
+            Text("DRAFT")
+              .font(.caption2).bold()
+              .padding(.horizontal, 5).padding(.vertical, 2)
+              .background(Color.orange.opacity(0.2))
+              .foregroundColor(.orange)
+              .clipShape(RoundedRectangle(cornerRadius: 4))
           }
           Text("\(workout.sortedSets.count) sets • \(workout.totalExerciseCount) exercises")
             .font(.caption)
@@ -142,6 +151,38 @@ private struct WorkoutRow: View {
             .foregroundColor(.secondary)
         }
         .buttonStyle(.borderless)
+      }
+
+      if let onApprove {
+        Button {
+          Task {
+            isApproving = true
+            do {
+              try await onApprove()
+            } catch {
+              approveError = error.localizedDescription
+            }
+            isApproving = false
+          }
+        } label: {
+          Text(isApproving ? "Approving…" : "Approve Workout")
+            .font(.caption).bold()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.15))
+            .foregroundColor(.green)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.borderless)
+        .disabled(isApproving)
+        .alert("Approve Failed", isPresented: Binding(
+          get: { approveError != nil },
+          set: { if !$0 { approveError = nil } }
+        )) {
+          Button("OK") { approveError = nil }
+        } message: {
+          Text(approveError ?? "")
+        }
       }
 
       if isExpanded {
