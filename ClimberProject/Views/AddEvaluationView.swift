@@ -136,28 +136,7 @@ struct AddEvaluationView: View {
   private var customSection: some View {
     Section {
       ForEach($customEntries) { $entry in
-        HStack {
-          Picker("", selection: $entry.criteriaId) {
-            Text("Select…").tag("")
-            ForEach(vm.criteria) { c in
-              Text(c.name).tag(c.id)
-            }
-          }
-          .labelsHidden()
-          .frame(maxWidth: .infinity, alignment: .leading)
-
-          TextField("Value", text: $entry.value)
-            .keyboardType(.decimalPad)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 70)
-
-          if let unit = vm.criteria.first(where: { $0.id == entry.criteriaId })?.unit {
-            Text(unit)
-              .foregroundColor(.secondary)
-              .font(.caption)
-              .frame(width: 30, alignment: .leading)
-          }
-        }
+        CustomEntryRow(entry: $entry, allCriteria: vm.criteria)
       }
       .onDelete { customEntries.remove(atOffsets: $0) }
 
@@ -204,7 +183,18 @@ struct AddEvaluationView: View {
       }
     case .custom:
       inserts = customEntries.compactMap { entry in
-        guard !entry.criteriaId.isEmpty, let value = Double(entry.value) else { return nil }
+        guard !entry.criteriaId.isEmpty, !entry.value.isEmpty else { return nil }
+        let criteria = vm.criteria.first { $0.id == entry.criteriaId }
+        let value: Double
+        if criteria?.isMaxBoulder == true, let idx = GradeScale.boulder.firstIndex(of: entry.value) {
+          value = Double(idx)
+        } else if criteria?.isMaxRope == true, let idx = GradeScale.rope.firstIndex(of: entry.value) {
+          value = Double(idx)
+        } else if let d = Double(entry.value) {
+          value = d
+        } else {
+          return nil
+        }
         return EvaluationInsert(
           athleteId: athleteId, coachId: coachId,
           criteriaId: entry.criteriaId, evaluatedAt: dateString,
@@ -233,4 +223,49 @@ private struct CustomEntry: Identifiable {
   let id = UUID()
   var criteriaId: String = ""
   var value: String = ""
+}
+
+private struct CustomEntryRow: View {
+  @Binding var entry: CustomEntry
+  let allCriteria: [AssessmentCriteria]
+
+  private var selected: AssessmentCriteria? {
+    allCriteria.first { $0.id == entry.criteriaId }
+  }
+
+  var body: some View {
+    HStack {
+      Picker("", selection: $entry.criteriaId) {
+        Text("Select…").tag("")
+        ForEach(allCriteria) { c in
+          Text(c.name).tag(c.id)
+        }
+      }
+      .labelsHidden()
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .onChange(of: entry.criteriaId) { _ in entry.value = "" }
+
+      if let c = selected, c.isMaxBoulder || c.isMaxRope {
+        let scale = c.isMaxBoulder ? GradeScale.boulder : GradeScale.rope
+        Picker("", selection: $entry.value) {
+          Text("—").tag("")
+          ForEach(scale.reversed(), id: \.self) { grade in
+            Text(grade).tag(grade)
+          }
+        }
+        .labelsHidden()
+      } else {
+        TextField("Value", text: $entry.value)
+          .keyboardType(.decimalPad)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 70)
+        if let unit = selected?.unit {
+          Text(unit)
+            .foregroundColor(.secondary)
+            .font(.caption)
+            .frame(width: 30, alignment: .leading)
+        }
+      }
+    }
+  }
 }

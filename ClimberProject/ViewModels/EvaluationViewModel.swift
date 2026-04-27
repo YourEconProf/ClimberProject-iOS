@@ -126,6 +126,27 @@ class EvaluationViewModel: ObservableObject {
       case .maxRope:
         try await supabase.from("assessment_criteria")
           .update(MaxRopePatch(isMaxRope: !c.isMaxRope)).eq("id", value: id).execute()
+      case .maxHang:
+        try await supabase.from("assessment_criteria")
+          .update(MaxHangPatch(isMaxHang: !c.isMaxHang)).eq("id", value: id).execute()
+      case .maxPullupLoad:
+        try await supabase.from("assessment_criteria")
+          .update(MaxPullupLoadPatch(isMaxPullupLoad: !c.isMaxPullupLoad)).eq("id", value: id).execute()
+      case .meEdge:
+        try await supabase.from("assessment_criteria")
+          .update(MeEdgePatch(isMeEdge: !c.isMeEdge)).eq("id", value: id).execute()
+      case .lockoff:
+        try await supabase.from("assessment_criteria")
+          .update(LockoffPatch(isLockoff: !c.isLockoff)).eq("id", value: id).execute()
+      case .height:
+        try await supabase.from("assessment_criteria")
+          .update(HeightPatch(isHeight: !c.isHeight)).eq("id", value: id).execute()
+      case .weight:
+        try await supabase.from("assessment_criteria")
+          .update(WeightPatch(isWeight: !c.isWeight)).eq("id", value: id).execute()
+      case .wingspan:
+        try await supabase.from("assessment_criteria")
+          .update(WingspanPatch(isWingspan: !c.isWingspan)).eq("id", value: id).execute()
       }
       await fetchCriteria()
     } catch {
@@ -180,7 +201,42 @@ private struct MaxRopePatch: Encodable {
   enum CodingKeys: String, CodingKey { case isMaxRope = "is_max_rope" }
 }
 
-enum CriteriaFlag { case fm, morpho, strength, maxBoulder, maxRope }
+private struct MaxHangPatch: Encodable {
+  let isMaxHang: Bool
+  enum CodingKeys: String, CodingKey { case isMaxHang = "is_max_hang" }
+}
+
+private struct MaxPullupLoadPatch: Encodable {
+  let isMaxPullupLoad: Bool
+  enum CodingKeys: String, CodingKey { case isMaxPullupLoad = "is_max_pullup_load" }
+}
+
+private struct MeEdgePatch: Encodable {
+  let isMeEdge: Bool
+  enum CodingKeys: String, CodingKey { case isMeEdge = "is_me_edge" }
+}
+
+private struct LockoffPatch: Encodable {
+  let isLockoff: Bool
+  enum CodingKeys: String, CodingKey { case isLockoff = "is_lockoff" }
+}
+
+private struct HeightPatch: Encodable {
+  let isHeight: Bool
+  enum CodingKeys: String, CodingKey { case isHeight = "is_height" }
+}
+
+private struct WeightPatch: Encodable {
+  let isWeight: Bool
+  enum CodingKeys: String, CodingKey { case isWeight = "is_weight" }
+}
+
+private struct WingspanPatch: Encodable {
+  let isWingspan: Bool
+  enum CodingKeys: String, CodingKey { case isWingspan = "is_wingspan" }
+}
+
+enum CriteriaFlag { case fm, morpho, strength, maxBoulder, maxRope, maxHang, maxPullupLoad, meEdge, lockoff, height, weight, wingspan }
 
 struct EvaluationInsert: Encodable {
   let athleteId: String

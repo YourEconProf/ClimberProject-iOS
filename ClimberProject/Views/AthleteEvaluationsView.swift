@@ -84,7 +84,7 @@ struct AthleteEvaluationsView: View {
                   .font(.caption).foregroundColor(.secondary)
               }
               Spacer()
-              Text(formatValue(evaluation.value, unit: c?.unit))
+              Text(formatValue(evaluation.value, criteria: c))
                 .font(.subheadline).foregroundColor(.secondary)
             }
           }
@@ -130,7 +130,7 @@ struct AthleteEvaluationsView: View {
               .padding(.horizontal, 8).padding(.vertical, 6)
               .background(idx % 2 == 1 ? Color(UIColor.tertiarySystemBackground) : Color.clear)
             ForEach(tableDates, id: \.self) { date in
-              Text(cellValue(criteriaId: c.id, date: date, unit: c.unit))
+              Text(cellValue(criteriaId: c.id, date: date, criteria: c))
                 .font(.caption).foregroundColor(.secondary)
                 .frame(width: 80, alignment: .center)
                 .padding(.horizontal, 4).padding(.vertical, 6)
@@ -153,20 +153,24 @@ struct AthleteEvaluationsView: View {
     .foregroundColor(.primary)
   }
 
-  private func cellValue(criteriaId: String, date: String, unit: String?) -> String {
+  private func cellValue(criteriaId: String, date: String, criteria: AssessmentCriteria) -> String {
     let matches = vm.evaluations.filter {
       $0.criteriaId == criteriaId && $0.evaluatedAt.hasPrefix(date)
     }
     guard let best = matches.max(by: { $0.evaluatedAt < $1.evaluatedAt }) else { return "—" }
-    return formatValue(best.value, unit: unit)
+    return formatValue(best.value, criteria: criteria)
   }
 
-  private func formatValue(_ value: Double?, unit: String?) -> String {
+  private func formatValue(_ value: Double?, criteria: AssessmentCriteria?) -> String {
     guard let value else { return "—" }
+    if let c = criteria {
+      if c.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
+      if c.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
+    }
     let s = value.truncatingRemainder(dividingBy: 1) == 0
       ? String(format: "%.0f", value)
       : String(format: "%.1f", value)
-    if let u = unit { return "\(s) \(u)" }
+    if let u = criteria?.unit { return "\(s) \(u)" }
     return s
   }
 }
