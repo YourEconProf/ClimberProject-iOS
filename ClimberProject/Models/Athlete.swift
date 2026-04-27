@@ -122,7 +122,9 @@ struct Athlete: Codable, Identifiable {
   }
 
   var hasPhysicalData: Bool {
-    heightCm != nil || weightKg != nil || wingspanCm != nil || dominantHand != nil || gripPreference != nil
+    heightCm != nil || weightKg != nil || wingspanCm != nil ||
+    dominantHand != nil || gripPreference != nil ||
+    fullCrimpReady == true || campusReady == true
   }
 
   var hasExperienceData: Bool {

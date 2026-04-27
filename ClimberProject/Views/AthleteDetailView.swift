@@ -118,6 +118,87 @@ struct AthleteDetailView: View {
         }
       }
 
+      // Experience
+      if athlete.hasExperienceData {
+        Section("Experience") {
+          if let yr = athlete.yearStartedClimbing {
+            LabeledContent("Started Climbing", value: "\(yr)")
+          }
+          if let yr = athlete.yearStartedTraining {
+            LabeledContent("Started Training", value: "\(yr)")
+          }
+          if let level = athlete.experienceLevel {
+            LabeledContent("Level", value: level.replacingOccurrences(of: "_", with: " ").capitalized)
+          }
+          if let phv = athlete.phvStage {
+            LabeledContent("PHV Stage", value: phv.capitalized)
+          }
+        }
+      }
+
+      // Physical
+      if athlete.hasPhysicalData {
+        Section("Physical") {
+          if let h = athlete.heightCm {
+            LabeledContent("Height", value: "\(formatDecimal(h)) cm")
+          }
+          if let w = athlete.weightKg {
+            LabeledContent("Weight", value: "\(formatDecimal(w)) kg")
+          }
+          if let ws = athlete.wingspanCm {
+            LabeledContent("Wingspan", value: "\(formatDecimal(ws)) cm")
+          }
+          if let hand = athlete.dominantHand {
+            LabeledContent("Dominant Hand", value: hand.capitalized)
+          }
+          if let grip = athlete.gripPreference {
+            LabeledContent("Grip Preference", value: grip.replacingOccurrences(of: "_", with: " ").capitalized)
+          }
+          if athlete.fullCrimpReady == true || athlete.campusReady == true {
+            HStack(spacing: 8) {
+              if athlete.fullCrimpReady == true {
+                Text("Full Crimp ✓")
+                  .font(.caption).bold()
+                  .padding(.horizontal, 8).padding(.vertical, 4)
+                  .background(Color.blue.opacity(0.12))
+                  .foregroundColor(.blue)
+                  .clipShape(Capsule())
+              }
+              if athlete.campusReady == true {
+                Text("Campus Board ✓")
+                  .font(.caption).bold()
+                  .padding(.horizontal, 8).padding(.vertical, 4)
+                  .background(Color.purple.opacity(0.12))
+                  .foregroundColor(.purple)
+                  .clipShape(Capsule())
+              }
+            }
+          }
+        }
+      }
+
+      // Training Maxes
+      if athlete.hasTrainingMaxes {
+        Section("Training Maxes") {
+          if let v = athlete.maxHangKg {
+            LabeledContent("Max Hang", value: "\(formatDecimal(v)) kg")
+          }
+          if let v = athlete.maxPullupAddedKg {
+            LabeledContent("Max Pull-up Added", value: "+\(formatDecimal(v)) kg")
+          }
+          if let v = athlete.meEdgeMm {
+            LabeledContent("Min Edge", value: "\(v) mm")
+          }
+          if let v = athlete.lockoffSeconds {
+            LabeledContent("Lockoff", value: "\(v) s")
+          }
+          if let updated = athlete.maxesUpdatedAt {
+            Text("Updated \(updated.displayDate)")
+              .font(.caption2).foregroundColor(.secondary)
+          }
+        }
+      }
+
       // Personal Info
       Section("Personal Info") {
         LabeledContent("Name", value: athlete.displayName)
@@ -194,6 +275,12 @@ struct AthleteDetailView: View {
       : String(format: "%.1f", value)
     if let unit = criteria.unit { return "\(formatted) \(unit)" }
     return formatted
+  }
+
+  private func formatDecimal(_ v: Double) -> String {
+    v.truncatingRemainder(dividingBy: 1) == 0
+      ? String(format: "%.0f", v)
+      : String(format: "%.1f", v)
   }
 
   private func ordinal(_ n: Int) -> String {
