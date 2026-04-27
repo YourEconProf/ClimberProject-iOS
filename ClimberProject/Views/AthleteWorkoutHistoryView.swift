@@ -5,7 +5,9 @@ struct AthleteWorkoutHistoryView: View {
   @ObservedObject var vm: WorkoutViewModel
   @EnvironmentObject var authVM: AuthViewModel
 
+  @StateObject private var checkinVM = AthleteCheckinViewModel()
   @State private var showingAdd = false
+  @State private var showingCheckin = false
   @State private var editingWorkout: Workout?
   @State private var quickNotesWorkout: Workout?
   @State private var expanded: Set<String> = []
@@ -52,6 +54,11 @@ struct AthleteWorkoutHistoryView: View {
       ToolbarItem(placement: .primaryAction) {
         Button { showingAdd = true } label: { Image(systemName: "plus") }
       }
+      ToolbarItem(placement: .secondaryAction) {
+        Button { showingCheckin = true } label: {
+          Label("Check In", systemImage: "checkmark.circle")
+        }
+      }
     }
     .sheet(isPresented: $showingAdd) {
       AddWorkoutView(
@@ -73,6 +80,9 @@ struct AthleteWorkoutHistoryView: View {
     }
     .sheet(item: $quickNotesWorkout) { workout in
       QuickNotesSheet(vm: vm, workout: workout)
+    }
+    .sheet(isPresented: $showingCheckin) {
+      CheckinModalView(athlete: athlete, vm: checkinVM)
     }
     .task {
       if let gymId = authVM.currentCoach?.gymId, vm.exercises.isEmpty {
