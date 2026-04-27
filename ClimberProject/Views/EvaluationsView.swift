@@ -5,9 +5,12 @@ struct EvaluationsView: View {
   @StateObject private var athleteVM = AthleteViewModel()
   @StateObject private var evalVM = EvaluationViewModel()
 
+  @StateObject private var checkinVM = AthleteCheckinViewModel()
+
   @State private var searchText = ""
   @State private var selectedAthlete: Athlete?
   @State private var addMode: EvaluationAddMode?
+  @State private var showingCheckin = false
 
   var suggestions: [Athlete] {
     guard !searchText.isEmpty, selectedAthlete == nil else { return [] }
@@ -26,6 +29,13 @@ struct EvaluationsView: View {
 
         // Evaluation type links — only after athlete is selected
         if let athlete = selectedAthlete {
+          Section {
+            Button {
+              showingCheckin = true
+            } label: {
+              Label("Check In", systemImage: "checkmark.circle")
+            }
+          }
           Section {
             modeRow("FM Evaluation", icon: "figure.climbing", mode: .fm)
             modeRow("Morpho Evaluation", icon: "ruler", mode: .morpho)
@@ -62,6 +72,11 @@ struct EvaluationsView: View {
           coachId: authVM.currentCoach?.id ?? "",
           mode: mode
         )
+      }
+      .sheet(isPresented: $showingCheckin) {
+        if let athlete = selectedAthlete {
+          CheckinModalView(athlete: athlete, vm: checkinVM)
+        }
       }
       .task {
         await withTaskGroup(of: Void.self) { group in

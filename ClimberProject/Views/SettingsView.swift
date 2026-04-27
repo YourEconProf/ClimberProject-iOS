@@ -30,16 +30,24 @@ struct SettingsView: View {
   @State private var newExerciseDifficultyType = "free_text"
   @State private var newCriteriaName = ""
   @State private var newCriteriaUnit = ""
+  @State private var newProgramName = ""
 
   @State private var newTagName = ""
   @State private var tagError: String?
   @State private var setTypeError: String?
   @State private var exerciseError: String?
   @State private var criteriaError: String?
+  @State private var programError: String?
+
+  @State private var editingProgram: Program?
+  @State private var generatingProgramId: String?
+  @State private var confirmGenerateProgram: Program?
+  @State private var generateResult: GeneratePracticeResult?
+  @State private var generateError: String?
 
   @FocusState private var focusedField: Field?
 
-  private enum Field { case tag, setType, exercise, criteria }
+  private enum Field { case tag, setType, exercise, criteria, program }
 
   private var selectedMode: AppearanceMode {
     AppearanceMode(rawValue: appearanceMode) ?? .system
@@ -78,7 +86,14 @@ struct SettingsView: View {
         // Programs
         Section("Programs") {
           ForEach(programVM.programs) { p in
-            Text(p.name)
+            ProgramSettingsRow(
+              program: p,
+              isGenerating: generatingProgramId == p.id,
+              onEdit: { editingProgram = p },
+              onGenerate: {
+                confirmGenerateProgram = p
+              }
+            )
           }
           .onDelete { indices in
             Task {
@@ -88,6 +103,58 @@ struct SettingsView: View {
               }
             }
           }
+          HStack {
+            TextField("New program name…", text: $newProgramName)
+              .focused($focusedField, equals: .program)
+              .submitLabel(.done)
+              .onSubmit { Task { await addProgram() } }
+            Button("Add") { Task { await addProgram() } }
+              .disabled(newProgramName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+          if let programError {
+            Text(programError).foregroundColor(.red).font(.caption)
+          }
+        }
+        .sheet(item: $editingProgram) { p in
+          ProgramEditorView(
+            program: p,
+            vm: programVM,
+            templates: workoutVM.namedWorkouts.filter { $0.isTemplate }
+          )
+        }
+        .sheet(item: $generateResult) { result in
+          GenerateResultSheet(result: result)
+        }
+        .confirmationDialog(
+          "Generate Practice?",
+          isPresented: Binding(get: { confirmGenerateProgram != nil }, set: { if !$0 { confirmGenerateProgram = nil } }),
+          titleVisibility: .visible
+        ) {
+          Button("Generate", role: .destructive) {
+            guard let p = confirmGenerateProgram else { return }
+            confirmGenerateProgram = nil
+            Task {
+              generatingProgramId = p.id
+              generateError = nil
+              do {
+                generateResult = try await programVM.generatePractice(programId: p.id)
+              } catch {
+                generateError = error.localizedDescription
+              }
+              generatingProgramId = nil
+            }
+          }
+          Button("Cancel", role: .cancel) { confirmGenerateProgram = nil }
+        } message: {
+          Text("This will use AI to generate today's practice workouts for \(confirmGenerateProgram?.name ?? "this program"). Are you sure?")
+        }
+        .alert("Generate Failed", isPresented: Binding(
+          get: { generateError != nil },
+          set: { if !$0 { generateError = nil } }
+        )) {
+          Button("OK") { generateError = nil }
+        } message: {
+          Text(generateError ?? "")
         }
 
         // Assessment Criteria
@@ -278,6 +345,7 @@ struct SettingsView: View {
         if let gymId = authVM.currentCoach?.gymId {
           await setTypeVM.fetch(gymId: gymId)
           await workoutVM.fetchExercises(gymId: gymId)
+          await workoutVM.fetchNamedWorkouts()
           await tagVM.fetch(gymId: gymId)
         }
         await programVM.fetchPrograms()
@@ -297,6 +365,20 @@ struct SettingsView: View {
         .clipShape(Capsule())
     }
     .buttonStyle(.borderless)
+  }
+
+  private func addProgram() async {
+    guard let gymId = authVM.currentCoach?.gymId else { return }
+    let trimmed = newProgramName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    programError = nil
+    do {
+      try await programVM.addProgram(gymId: gymId, name: trimmed)
+      newProgramName = ""
+      focusedField = nil
+    } catch {
+      programError = error.localizedDescription
+    }
   }
 
   private func addTag() async {
@@ -396,6 +478,104 @@ struct SettingsView: View {
     case "admin":      return .purple
     default:           return .secondary
     }
+  }
+}
+
+private struct GenerateResultSheet: View {
+  let result: GeneratePracticeResult
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      List {
+        Section {
+          HStack {
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            Text("\(result.generated) workout\(result.generated == 1 ? "" : "s") generated")
+              .font(.subheadline).bold()
+          }
+        }
+        if let skipped = result.skipped, !skipped.isEmpty {
+          Section("Skipped (\(skipped.count))") {
+            ForEach(skipped) { item in
+              VStack(alignment: .leading, spacing: 2) {
+                if let name = item.name { Text(name).font(.subheadline) }
+                Text(item.reason).font(.caption).foregroundColor(.secondary)
+              }
+            }
+          }
+        }
+        if let blocked = result.blocked, !blocked.isEmpty {
+          Section("Blocked (\(blocked.count))") {
+            ForEach(blocked) { item in
+              VStack(alignment: .leading, spacing: 2) {
+                if let name = item.name { Text(name).font(.subheadline) }
+                Text(item.reason).font(.caption).foregroundColor(.red)
+              }
+            }
+          }
+        }
+      }
+      .navigationTitle("Generate Practice")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+  }
+}
+
+private struct ProgramSettingsRow: View {
+  let program: Program
+  let isGenerating: Bool
+  let onEdit: () -> Void
+  let onGenerate: () -> Void
+
+  var body: some View {
+    HStack {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(program.name).font(.subheadline)
+        HStack(spacing: 6) {
+          if let ag = program.ageGroup {
+            Text(ag)
+              .font(.caption2).bold()
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.blue.opacity(0.12))
+              .foregroundColor(.blue)
+              .clipShape(Capsule())
+          }
+          if let disc = program.discipline {
+            Text(disc.capitalized)
+              .font(.caption2)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .background(Color.secondary.opacity(0.12))
+              .foregroundColor(.secondary)
+              .clipShape(Capsule())
+          }
+          if !program.practiceDayNames.isEmpty {
+            Text(program.practiceDayNames)
+              .font(.caption2)
+              .foregroundColor(.secondary)
+          }
+        }
+      }
+      Spacer()
+      if isGenerating {
+        ProgressView().scaleEffect(0.8)
+      } else {
+        Button { onGenerate() } label: {
+          Image(systemName: "bolt.fill").foregroundColor(.orange)
+        }
+        .buttonStyle(.borderless)
+      }
+      Button { onEdit() } label: {
+        Image(systemName: "pencil").foregroundColor(.accentColor)
+      }
+      .buttonStyle(.borderless)
+    }
+    .padding(.vertical, 2)
   }
 }
 

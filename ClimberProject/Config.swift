@@ -14,4 +14,6 @@ struct Config {
     }
     return key
   }()
+
+  static let apiBaseURL = "https://climber-project.vercel.app"
 }

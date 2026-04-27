@@ -9,6 +9,8 @@ struct AthleteDetailView: View {
   @StateObject private var workoutVM = WorkoutViewModel()
   @StateObject private var competitionVM = CompetitionViewModel()
   @StateObject private var programVM = ProgramViewModel()
+  @StateObject private var assessmentVM = AthleteAssessmentViewModel()
+  @State private var showReassessConfirm = false
 
 
   var fmCriteria: [AssessmentCriteria] {
@@ -105,6 +107,72 @@ struct AthleteDetailView: View {
       evalSection("FM", criteria: fmCriteria)
       evalSection("Morpho", criteria: morphoCriteria)
       evalSection("Strength", criteria: strengthCriteria)
+
+      // AI Assessment
+      Section("AI Assessment") {
+        if assessmentVM.isLoading {
+          HStack { Spacer(); ProgressView(); Spacer() }
+        } else if let a = assessmentVM.latestAssessment {
+          if !assessmentVM.alerts.isEmpty {
+            HStack(spacing: 6) {
+              ForEach(assessmentVM.criticalAlerts.prefix(3)) { alert in
+                AlertBadge(message: alert.message, color: .red)
+              }
+              ForEach(assessmentVM.warnAlerts.prefix(3)) { alert in
+                AlertBadge(message: alert.message, color: .orange)
+              }
+              ForEach(assessmentVM.infoAlerts.prefix(3)) { alert in
+                AlertBadge(message: alert.message, color: .blue)
+              }
+            }
+          }
+          VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+              TrendChip(label: "Readiness", value: a.readinessTrend)
+              TrendChip(label: "Fingers", value: a.fingerComfortTrend)
+              TrendChip(label: "Load", value: a.loadTolerance)
+            }
+            if let focus = a.recommendedFocus, !focus.isEmpty {
+              Text("Focus: \(focus)")
+                .font(.caption).bold()
+                .foregroundColor(.accentColor)
+            }
+            if let summary = a.summaryMarkdown, !summary.isEmpty {
+              Text(summary)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(3)
+            }
+            Text(a.assessedAt.displayDate)
+              .font(.caption2).foregroundColor(.secondary)
+          }
+          NavigationLink("Full Assessment") {
+            AthleteAssessmentDetailView(assessment: a, alerts: assessmentVM.alerts)
+          }
+          .font(.caption)
+        } else {
+          Text("No assessment yet")
+            .font(.caption).foregroundColor(.secondary)
+        }
+        Button {
+          showReassessConfirm = true
+        } label: {
+          HStack {
+            if assessmentVM.isReassessing {
+              ProgressView().scaleEffect(0.75)
+            }
+            Text(assessmentVM.isReassessing ? "Reassessing…" : "Reassess Now")
+              .font(.caption).bold()
+          }
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 6)
+          .background(Color.accentColor.opacity(0.12))
+          .foregroundColor(.accentColor)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.borderless)
+        .disabled(assessmentVM.isReassessing)
+      }
 
       // Programs
       Section("Programs") {
@@ -226,6 +294,14 @@ struct AthleteDetailView: View {
     }
     .navigationTitle(athlete.displayName)
     .navigationBarTitleDisplayMode(.inline)
+    .confirmationDialog("Run AI Reassessment?", isPresented: $showReassessConfirm, titleVisibility: .visible) {
+      Button("Reassess Now", role: .destructive) {
+        Task { try? await assessmentVM.reassess(athleteId: athlete.id) }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("This will call the AI to generate a new assessment for \(athlete.displayName). Are you sure?")
+    }
 
     .task {
       await withTaskGroup(of: Void.self) { group in
@@ -237,6 +313,8 @@ struct AthleteDetailView: View {
         group.addTask { await competitionVM.fetch(athleteId: athlete.id) }
         group.addTask { await programVM.fetchPrograms() }
         group.addTask { await programVM.fetchEnrollments(athleteId: athlete.id) }
+        group.addTask { await assessmentVM.fetchLatestAssessment(athleteId: athlete.id) }
+        group.addTask { await assessmentVM.fetchAlerts(athleteId: athlete.id) }
       }
     }
   }
@@ -293,6 +371,57 @@ struct AthleteDetailView: View {
     case 3: return "\(n)rd"
     default: return "\(n)th"
     }
+  }
+}
+
+private struct AlertBadge: View {
+  let message: String
+  let color: Color
+  var body: some View {
+    Text(message)
+      .font(.caption2).bold()
+      .lineLimit(1)
+      .padding(.horizontal, 6).padding(.vertical, 3)
+      .background(color.opacity(0.15))
+      .foregroundColor(color)
+      .clipShape(Capsule())
+  }
+}
+
+private struct TrendChip: View {
+  let label: String
+  let value: String?
+
+  private var icon: String {
+    switch value?.lowercased() {
+    case "improving": return "arrow.up"
+    case "declining": return "arrow.down"
+    case "stable":    return "minus"
+    default:          return "questionmark"
+    }
+  }
+
+  private var color: Color {
+    switch value?.lowercased() {
+    case "improving": return .green
+    case "declining": return .red
+    case "stable":    return .orange
+    default:          return .secondary
+    }
+  }
+
+  var body: some View {
+    VStack(spacing: 2) {
+      Image(systemName: icon)
+        .font(.caption2)
+        .foregroundColor(color)
+      Text(label)
+        .font(.caption2)
+        .foregroundColor(.secondary)
+    }
+    .padding(.horizontal, 8).padding(.vertical, 4)
+    .background(color.opacity(0.08))
+    .clipShape(RoundedRectangle(cornerRadius: 6))
   }
 }
 
