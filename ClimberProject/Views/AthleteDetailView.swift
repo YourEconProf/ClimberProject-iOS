@@ -115,15 +115,21 @@ struct AthleteDetailView: View {
           HStack { Spacer(); ProgressView(); Spacer() }
         } else if let a = assessmentVM.latestAssessment {
           if !assessmentVM.alerts.isEmpty {
-            HStack(spacing: 6) {
-              ForEach(assessmentVM.criticalAlerts.prefix(3)) { alert in
-                AlertBadge(message: alert.message, color: .red)
+            VStack(alignment: .leading, spacing: 6) {
+              ForEach(assessmentVM.criticalAlerts) { alert in
+                AlertRow(alert: alert, color: .red,
+                         onAck: { Task { try? await assessmentVM.acknowledge(alertId: alert.id, coachId: authVM.currentCoach?.id ?? "") } },
+                         onResolve: { Task { try? await assessmentVM.resolve(alertId: alert.id) } })
               }
-              ForEach(assessmentVM.warnAlerts.prefix(3)) { alert in
-                AlertBadge(message: alert.message, color: .orange)
+              ForEach(assessmentVM.warnAlerts) { alert in
+                AlertRow(alert: alert, color: .orange,
+                         onAck: { Task { try? await assessmentVM.acknowledge(alertId: alert.id, coachId: authVM.currentCoach?.id ?? "") } },
+                         onResolve: { Task { try? await assessmentVM.resolve(alertId: alert.id) } })
               }
-              ForEach(assessmentVM.infoAlerts.prefix(3)) { alert in
-                AlertBadge(message: alert.message, color: .blue)
+              ForEach(assessmentVM.infoAlerts) { alert in
+                AlertRow(alert: alert, color: .blue,
+                         onAck: { Task { try? await assessmentVM.acknowledge(alertId: alert.id, coachId: authVM.currentCoach?.id ?? "") } },
+                         onResolve: { Task { try? await assessmentVM.resolve(alertId: alert.id) } })
               }
             }
           }
@@ -407,17 +413,45 @@ struct AthleteDetailView: View {
   }
 }
 
-private struct AlertBadge: View {
-  let message: String
+private struct AlertRow: View {
+  let alert: AthleteAlert
   let color: Color
+  let onAck: () -> Void
+  let onResolve: () -> Void
+
+  private var dimmed: Bool { alert.acknowledgedAt != nil }
+
   var body: some View {
-    Text(message)
-      .font(.caption2).bold()
-      .lineLimit(1)
-      .padding(.horizontal, 6).padding(.vertical, 3)
-      .background(color.opacity(0.15))
-      .foregroundColor(color)
-      .clipShape(Capsule())
+    HStack(spacing: 8) {
+      Circle()
+        .fill(color)
+        .frame(width: 8, height: 8)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(alert.alertType.replacingOccurrences(of: "_", with: " ").capitalized)
+          .font(.caption).bold()
+          .foregroundColor(color)
+        Text(alert.message)
+          .font(.caption)
+          .foregroundColor(.secondary)
+      }
+      Spacer()
+      if !dimmed {
+        Button(action: onAck) {
+          Image(systemName: "checkmark.circle")
+            .font(.body)
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.borderless)
+      }
+      Button(action: onResolve) {
+        Image(systemName: "xmark.circle")
+          .font(.body)
+          .foregroundColor(.secondary)
+      }
+      .buttonStyle(.borderless)
+    }
+    .padding(.vertical, 4)
+    .opacity(dimmed ? 0.5 : 1)
   }
 }
 

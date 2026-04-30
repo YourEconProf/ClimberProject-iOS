@@ -39,10 +39,49 @@ class AthleteAssessmentViewModel: ObservableObject {
         .order("created_at", ascending: false)
         .execute()
         .value
-      alerts = all.filter { $0.resolvedAt == nil && $0.acknowledgedAt == nil }
+      alerts = all.filter { $0.resolvedAt == nil }
     } catch {
       // alerts are non-critical; suppress error
     }
+  }
+
+  func acknowledge(alertId: String, coachId: String) async throws {
+    struct Patch: Encodable {
+      let acknowledgedAt: String
+      let acknowledgedBy: String
+      enum CodingKeys: String, CodingKey {
+        case acknowledgedAt = "acknowledged_at"
+        case acknowledgedBy = "acknowledged_by"
+      }
+    }
+    let now = ISO8601DateFormatter().string(from: Date())
+    try await supabase
+      .from("athlete_alerts")
+      .update(Patch(acknowledgedAt: now, acknowledgedBy: coachId))
+      .eq("id", value: alertId)
+      .execute()
+    if let i = alerts.firstIndex(where: { $0.id == alertId }) {
+      let a = alerts[i]
+      alerts[i] = AthleteAlert(
+        id: a.id, athleteId: a.athleteId, alertType: a.alertType,
+        severity: a.severity, message: a.message,
+        resolvedAt: a.resolvedAt, acknowledgedAt: now, createdAt: a.createdAt
+      )
+    }
+  }
+
+  func resolve(alertId: String) async throws {
+    struct Patch: Encodable {
+      let resolvedAt: String
+      enum CodingKeys: String, CodingKey { case resolvedAt = "resolved_at" }
+    }
+    let now = ISO8601DateFormatter().string(from: Date())
+    try await supabase
+      .from("athlete_alerts")
+      .update(Patch(resolvedAt: now))
+      .eq("id", value: alertId)
+      .execute()
+    alerts.removeAll { $0.id == alertId }
   }
 
   func reassess(athleteId: String) async throws {
