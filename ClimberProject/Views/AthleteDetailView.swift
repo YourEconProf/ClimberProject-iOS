@@ -10,6 +10,7 @@ struct AthleteDetailView: View {
   @StateObject private var competitionVM = CompetitionViewModel()
   @StateObject private var programVM = ProgramViewModel()
   @StateObject private var assessmentVM = AthleteAssessmentViewModel()
+  @StateObject private var mentalVM = MentalFrameworkViewModel()
   @State private var showReassessConfirm = false
 
 
@@ -174,6 +175,37 @@ struct AthleteDetailView: View {
         .disabled(assessmentVM.isReassessing)
       }
 
+      // Mental Performance Framework (U17/U19 only)
+      if isMentalFrameworkEligible(programs: programVM.programs, enrollments: programVM.enrollments) {
+        Section("Mental Performance Framework") {
+          ForEach(MentalComponent.allCases, id: \.self) { component in
+            NavigationLink {
+              MentalFrameworkEditorView(
+                athleteId: athlete.id,
+                component: component,
+                vm: mentalVM
+              )
+              .environmentObject(authVM)
+            } label: {
+              VStack(alignment: .leading, spacing: 4) {
+                Text(component.displayName).font(.subheadline)
+                if let row = mentalVM.current[component.rawValue], !row.content.isEmpty {
+                  Text(row.content)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                } else {
+                  Text("—")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+              }
+              .padding(.vertical, 2)
+            }
+          }
+        }
+      }
+
       // Programs
       Section("Programs") {
         ForEach(programVM.enrollments) { enrollment in
@@ -315,6 +347,7 @@ struct AthleteDetailView: View {
         group.addTask { await programVM.fetchEnrollments(athleteId: athlete.id) }
         group.addTask { await assessmentVM.fetchLatestAssessment(athleteId: athlete.id) }
         group.addTask { await assessmentVM.fetchAlerts(athleteId: athlete.id) }
+        group.addTask { await mentalVM.fetchCurrent(athleteId: athlete.id) }
       }
     }
   }
