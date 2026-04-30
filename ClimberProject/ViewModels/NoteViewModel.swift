@@ -19,6 +19,7 @@ class NoteViewModel: ObservableObject {
         .from("notes")
         .select()
         .eq("athlete_id", value: athleteId)
+        .neq("category", value: "ai")
         .order("created_at", ascending: false)
         .execute()
         .value

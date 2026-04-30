@@ -3,7 +3,7 @@ import Foundation
 struct Note: Codable, Identifiable {
   let id: String
   let athleteId: String
-  let coachId: String
+  let coachId: String?
   let note: String
   let category: NoteCategory
   let isPrivate: Bool
@@ -26,9 +26,4 @@ enum NoteCategory: String, Codable, CaseIterable {
   case goal
   case injury
   case general
-  case ai
-
-  var displayName: String {
-    self == .ai ? "AI" : rawValue.capitalized
-  }
 }

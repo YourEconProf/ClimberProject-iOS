@@ -31,7 +31,7 @@ struct AthleteNotesView: View {
                   selectedFilter = nil
                 }
                 ForEach(NoteCategory.allCases, id: \.self) { cat in
-                  FilterChip(label: cat.displayName, isSelected: selectedFilter == cat) {
+                  FilterChip(label: cat.rawValue.capitalized, isSelected: selectedFilter == cat) {
                     selectedFilter = selectedFilter == cat ? nil : cat
                   }
                 }
@@ -93,7 +93,7 @@ private struct NoteRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Label(note.category.displayName, systemImage: categoryIcon)
+        Label(note.category.rawValue.capitalized, systemImage: categoryIcon)
           .font(.caption)
           .foregroundColor(categoryColor)
         Spacer()
@@ -120,7 +120,6 @@ private struct NoteRow: View {
     case .goal: return "target"
     case .injury: return "cross.fill"
     case .general: return "note.text"
-    case .ai: return "sparkles"
     }
   }
 
@@ -131,7 +130,6 @@ private struct NoteRow: View {
     case .goal: return .green
     case .injury: return .red
     case .general: return .secondary
-    case .ai: return Color(red: 0.976, green: 0.451, blue: 0.086)
     }
   }
 }
