@@ -26,4 +26,9 @@ enum NoteCategory: String, Codable, CaseIterable {
   case goal
   case injury
   case general
+  case ai
+
+  var displayName: String {
+    self == .ai ? "AI" : rawValue.capitalized
+  }
 }

@@ -5,6 +5,12 @@ struct AthleteNotesView: View {
   @ObservedObject var vm: NoteViewModel
   @EnvironmentObject var authVM: AuthViewModel
   @State private var showingAdd = false
+  @State private var selectedFilter: NoteCategory? = nil
+
+  private var filteredNotes: [Note] {
+    guard let filter = selectedFilter else { return vm.notes }
+    return vm.notes.filter { $0.category == filter }
+  }
 
   var body: some View {
     Group {
@@ -18,7 +24,25 @@ struct AthleteNotesView: View {
         .padding()
       } else {
         List {
-          ForEach(vm.notes) { note in
+          Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
+                FilterChip(label: "All", isSelected: selectedFilter == nil) {
+                  selectedFilter = nil
+                }
+                ForEach(NoteCategory.allCases, id: \.self) { cat in
+                  FilterChip(label: cat.displayName, isSelected: selectedFilter == cat) {
+                    selectedFilter = selectedFilter == cat ? nil : cat
+                  }
+                }
+              }
+              .padding(.vertical, 4)
+            }
+          }
+          .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+          .listRowBackground(Color.clear)
+
+          ForEach(filteredNotes) { note in
             NoteRow(note: note, currentCoach: authVM.currentCoach)
               .swipeActions(edge: .trailing) {
                 if canDelete(note) {
@@ -32,7 +56,7 @@ struct AthleteNotesView: View {
           }
         }
         .overlay {
-          if vm.notes.isEmpty {
+          if filteredNotes.isEmpty {
             ContentUnavailableView("No Notes", systemImage: "note.text")
           }
         }
@@ -69,7 +93,7 @@ private struct NoteRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Label(note.category.rawValue.capitalized, systemImage: categoryIcon)
+        Label(note.category.displayName, systemImage: categoryIcon)
           .font(.caption)
           .foregroundColor(categoryColor)
         Spacer()
@@ -96,6 +120,7 @@ private struct NoteRow: View {
     case .goal: return "target"
     case .injury: return "cross.fill"
     case .general: return "note.text"
+    case .ai: return "sparkles"
     }
   }
 
@@ -106,6 +131,27 @@ private struct NoteRow: View {
     case .goal: return .green
     case .injury: return .red
     case .general: return .secondary
+    case .ai: return Color(red: 0.976, green: 0.451, blue: 0.086)
     }
+  }
+}
+
+private struct FilterChip: View {
+  let label: String
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Text(label)
+        .font(.caption)
+        .fontWeight(isSelected ? .semibold : .regular)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(isSelected ? Color.accentColor.opacity(0.15) : Color(.systemGray5))
+        .foregroundColor(isSelected ? .accentColor : .primary)
+        .clipShape(Capsule())
+    }
+    .buttonStyle(.plain)
   }
 }

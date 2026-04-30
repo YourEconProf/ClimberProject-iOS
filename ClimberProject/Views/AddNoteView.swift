@@ -17,20 +17,26 @@ struct AddNoteView: View {
   @State private var showingCamera = false
   @State private var cameraImage: UIImage?
 
+  private var notePlaceholder: String {
+    category == .ai
+      ? "Add context for the AI assessment — e.g. athlete is returning from a school trip, has been mentally checked out, or is pushing for a specific comp."
+      : "Write a note…"
+  }
+
   var body: some View {
     NavigationStack {
       Form {
         Section {
           Picker("Category", selection: $category) {
             ForEach(NoteCategory.allCases, id: \.self) { c in
-              Text(c.rawValue.capitalized).tag(c)
+              Text(c.displayName).tag(c)
             }
           }
           Toggle("Private", isOn: $isPrivate)
         }
 
         Section("Note") {
-          TextField("Write a note…", text: $text, axis: .vertical)
+          TextField(notePlaceholder, text: $text, axis: .vertical)
             .lineLimit(4...10)
 
           HStack(spacing: 16) {
