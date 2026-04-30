@@ -57,11 +57,9 @@ class AthleteAssessmentViewModel: ObservableObject {
     request.httpMethod = "POST"
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONEncoder().encode([
-      "athlete_id": athleteId,
-      "source": "manual",
-      "force": "false"
-    ])
+    request.httpBody = try JSONEncoder().encode(
+      ReassessRequest(athlete_id: athleteId, source: "manual", force: true)
+    )
 
     let (_, response) = try await URLSession.shared.data(for: request)
     if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
@@ -75,4 +73,10 @@ class AthleteAssessmentViewModel: ObservableObject {
   var criticalAlerts: [AthleteAlert] { alerts.filter { $0.severity == "critical" } }
   var warnAlerts: [AthleteAlert]    { alerts.filter { $0.severity == "warn" } }
   var infoAlerts: [AthleteAlert]    { alerts.filter { $0.severity == "info" } }
+}
+
+private struct ReassessRequest: Encodable {
+  let athlete_id: String
+  let source: String
+  let force: Bool
 }
