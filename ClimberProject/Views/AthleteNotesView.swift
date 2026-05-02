@@ -43,7 +43,7 @@ struct AthleteNotesView: View {
           .listRowBackground(Color.clear)
 
           ForEach(filteredNotes) { note in
-            NoteRow(note: note, currentCoach: authVM.currentCoach)
+            NoteRow(note: note, currentCoach: authVM.currentCoach, gymTimezone: authVM.gymTimezone)
               .swipeActions(edge: .trailing) {
                 if canDelete(note) {
                   Button(role: .destructive) {
@@ -89,6 +89,7 @@ struct AthleteNotesView: View {
 private struct NoteRow: View {
   let note: Note
   let currentCoach: Coach?
+  let gymTimezone: String
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -102,7 +103,7 @@ private struct NoteRow: View {
             .font(.caption)
             .foregroundColor(.secondary)
         }
-        Text(note.createdAt.displayDate)
+        Text(note.createdAt.displayDate(in: gymTimezone))
           .font(.caption)
           .foregroundColor(.secondary)
       }

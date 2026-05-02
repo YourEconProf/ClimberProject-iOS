@@ -18,7 +18,7 @@ enum AppearanceMode: String, CaseIterable {
 struct SettingsView: View {
   @EnvironmentObject var authVM: AuthViewModel
   @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
-  @State private var gym: Gym?
+  @State private var timezoneError: String?
   @StateObject private var setTypeVM = SetTypeViewModel()
   @StateObject private var workoutVM = WorkoutViewModel()
   @StateObject private var programVM = ProgramViewModel()
@@ -76,10 +76,31 @@ struct SettingsView: View {
         }
 
         // Gym info
-        if let gym {
+        if let gym = authVM.currentGym {
           Section("Gym") {
             LabeledContent("Name", value: gym.name)
             LabeledContent("Gym Code", value: gym.code)
+            if authVM.currentCoach?.role == "admin" {
+              Picker("Timezone", selection: Binding(
+                get: { gym.timezone },
+                set: { newValue in
+                  Task {
+                    timezoneError = nil
+                    do { try await authVM.updateGymTimezone(newValue) }
+                    catch { timezoneError = error.localizedDescription }
+                  }
+                }
+              )) {
+                ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { tz in
+                  Text(tz).tag(tz)
+                }
+              }
+            } else {
+              LabeledContent("Timezone", value: gym.timezone)
+            }
+            if let timezoneError {
+              Text(timezoneError).foregroundColor(.red).font(.caption)
+            }
           }
         }
 
@@ -341,7 +362,6 @@ struct SettingsView: View {
         }
       }
       .task {
-        await loadGym()
         if let gymId = authVM.currentCoach?.gymId {
           await setTypeVM.fetch(gymId: gymId)
           await workoutVM.fetchExercises(gymId: gymId)
@@ -448,20 +468,6 @@ struct SettingsView: View {
     case "weight":  return "Weight"
     default:        return nil
     }
-  }
-
-  private func loadGym() async {
-    guard let gymId = authVM.currentCoach?.gymId else { return }
-    do {
-      let gyms: [Gym] = try await SupabaseService.shared.supabase
-        .from("gyms")
-        .select()
-        .eq("id", value: gymId)
-        .limit(1)
-        .execute()
-        .value
-      gym = gyms.first
-    } catch {}
   }
 
   private func roleName(_ role: String) -> String {

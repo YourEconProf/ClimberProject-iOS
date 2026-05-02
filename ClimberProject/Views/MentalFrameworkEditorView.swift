@@ -32,7 +32,7 @@ struct MentalFrameworkEditorView: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text("v\(v.version)").font(.subheadline).bold()
-                Text(v.createdAt.displayDate).font(.caption).foregroundColor(.secondary)
+                Text(v.createdAt.displayDate(in: authVM.gymTimezone)).font(.caption).foregroundColor(.secondary)
               }
               Spacer()
               if v.isCurrent {

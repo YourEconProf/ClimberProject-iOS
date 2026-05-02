@@ -47,13 +47,14 @@ struct AthleteGoalsView: View {
 private struct GoalRow: View {
   let goal: Goal
   @ObservedObject var vm: GoalViewModel
+  @EnvironmentObject var authVM: AuthViewModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(goal.description)
         .font(.body)
       HStack {
-        Text(goal.setAt.displayDate)
+        Text(goal.setAt.displayDate(in: authVM.gymTimezone))
           .font(.caption)
           .foregroundColor(.secondary)
         Spacer()

@@ -225,7 +225,7 @@ struct ProgramEditorView: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text("v\(version.versionNum)")
                   .font(.caption).bold()
-                Text(version.createdAt.displayDate)
+                Text(version.createdAt.displayDate(in: authVM.gymTimezone))
                   .font(.caption2).foregroundColor(.secondary)
                 if let msg = version.editMessage, !msg.isEmpty {
                   Text(msg).font(.caption2).foregroundColor(.secondary)

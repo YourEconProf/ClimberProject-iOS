@@ -6,8 +6,13 @@ import Supabase
 class AuthViewModel: ObservableObject {
   @Published var isLoggedIn = false
   @Published var currentCoach: Coach?
+  @Published var currentGym: Gym?
   @Published var isLoading = false
   @Published var error: String?
+
+  /// IANA timezone for the current coach's gym. Defaults to "UTC" until loaded.
+  /// Used to format `timestamptz` columns. `date` columns are always formatted in UTC.
+  var gymTimezone: String { currentGym?.timezone ?? "UTC" }
 
   private var supabase: SupabaseClient { SupabaseService.shared.supabase }
 
@@ -73,6 +78,20 @@ class AuthViewModel: ObservableObject {
     }
     isLoggedIn = false
     currentCoach = nil
+    currentGym = nil
+  }
+
+  /// Persist a new IANA timezone for the current coach's gym.
+  /// Optimistic — updates local state first, fires the patch in the background.
+  func updateGymTimezone(_ tz: String) async throws {
+    guard let gym = currentGym else { return }
+    currentGym = Gym(id: gym.id, name: gym.name, code: gym.code, timezone: tz)
+    struct Patch: Encodable { let timezone: String }
+    try await supabase
+      .from("gyms")
+      .update(Patch(timezone: tz))
+      .eq("id", value: gym.id)
+      .execute()
   }
 
   func resetPassword(email: String) async throws {
@@ -102,6 +121,18 @@ class AuthViewModel: ObservableObject {
       throw AuthError.coachNotFound
     }
     currentCoach = coach
+    try? await loadGym(gymId: coach.gymId)
+  }
+
+  private func loadGym(gymId: String) async throws {
+    let gyms: [Gym] = try await supabase
+      .from("gyms")
+      .select()
+      .eq("id", value: gymId)
+      .limit(1)
+      .execute()
+      .value
+    currentGym = gyms.first
   }
 }
 

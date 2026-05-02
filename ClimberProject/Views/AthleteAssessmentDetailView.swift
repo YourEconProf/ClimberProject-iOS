@@ -3,6 +3,7 @@ import SwiftUI
 struct AthleteAssessmentDetailView: View {
   let assessment: AthleteAssessment
   let alerts: [AthleteAlert]
+  @EnvironmentObject var authVM: AuthViewModel
 
   var body: some View {
     List {
@@ -16,7 +17,7 @@ struct AthleteAssessmentDetailView: View {
         if let focus = assessment.recommendedFocus, !focus.isEmpty {
           LabeledContent("Recommended Focus", value: focus)
         }
-        LabeledContent("Assessed", value: assessment.assessedAt.displayDate)
+        LabeledContent("Assessed", value: assessment.assessedAt.displayDate(in: authVM.gymTimezone))
         LabeledContent("Source", value: assessment.source.capitalized)
       }
 

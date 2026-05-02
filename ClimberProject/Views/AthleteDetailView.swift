@@ -33,7 +33,7 @@ struct AthleteDetailView: View {
             Text(latest.note)
               .font(.subheadline)
               .lineLimit(3)
-            Text(latest.createdAt.displayDate)
+            Text(latest.createdAt.displayDate(in: authVM.gymTimezone))
               .font(.caption)
               .foregroundColor(.secondary)
           }
@@ -150,7 +150,7 @@ struct AthleteDetailView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(3)
             }
-            Text(a.assessedAt.displayDate)
+            Text(a.assessedAt.displayDate(in: authVM.gymTimezone))
               .font(.caption2).foregroundColor(.secondary)
           }
           NavigationLink("Full Assessment") {
@@ -299,7 +299,7 @@ struct AthleteDetailView: View {
             LabeledContent("Lockoff", value: "\(v) s")
           }
           if let updated = athlete.maxesUpdatedAt {
-            Text("Updated \(updated.displayDate)")
+            Text("Updated \(updated.displayDate(in: authVM.gymTimezone))")
               .font(.caption2).foregroundColor(.secondary)
           }
         }

@@ -72,49 +72,51 @@ struct Athlete: Codable, Identifiable {
     "\(firstName) \(lastName)"
   }
 
-  var ageCategory: String? {
+  // USA Climbing Youth Series rule: competition age = seasonEndYear − birthYear,
+  // held for the entire Sept 1 → Aug 31 season. See design/age-category-rule.md.
+  var competitionAge: Int? {
     guard let dob else { return nil }
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
+    formatter.timeZone = TimeZone(identifier: "UTC")
     guard let birthDate = formatter.date(from: dob) else { return nil }
 
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+    let birthYear = utc.component(.year, from: birthDate)
+
+    let cal = Calendar.current
     let today = Date()
-    let calendar = Calendar.current
-    let month = calendar.component(.month, from: today) // 1=Jan, 9=Sep
-    let year = calendar.component(.year, from: today)
-    let cutoffYear = month >= 9 ? year + 1 : year
+    let month = cal.component(.month, from: today)        // 1 = Jan, 9 = Sep
+    let year = cal.component(.year, from: today)
+    let seasonEndYear = month >= 9 ? year + 1 : year       // Sept–Dec → next year
+    return seasonEndYear - birthYear
+  }
 
-    var components = DateComponents()
-    components.year = cutoffYear
-    components.month = 8  // August
-    components.day = 31
-    guard let cutoff = calendar.date(from: components) else { return nil }
-
-    let age = calendar.dateComponents([.year], from: birthDate, to: cutoff).year ?? 0
-    if age < 11 { return "U-11 \(age == 10 ? "↑" : "↓")" }
-    if age < 13 { return "U-13 \(age == 12 ? "↑" : "↓")" }
-    if age < 15 { return "U-15 \(age == 14 ? "↑" : "↓")" }
-    if age < 17 { return "U-17 \(age == 16 ? "↑" : "↓")" }
-    if age < 19 { return "U-19 \(age == 18 ? "↑" : "↓")" }
-    if age < 20 { return "U-20 \(age == 19 ? "↑" : "↓")" }
+  var ageCategory: String? {
+    guard let age = competitionAge else { return nil }
+    let isFinal = isFinalYear ?? false
+    let arrow = isFinal ? "↑" : "↓"
+    if age < 11 { return "U-11 \(arrow)" }
+    if age < 13 { return "U-13 \(arrow)" }
+    if age < 15 { return "U-15 \(arrow)" }
+    if age < 17 { return "U-17 \(arrow)" }
+    if age < 19 { return "U-19 \(arrow)" }
+    if age == 19 { return "U-20 ↑" }
     return "Adult"
+  }
+
+  // True when the athlete is the older of the two birth years in their band —
+  // i.e., aging out at the end of the current season.
+  var isFinalYear: Bool? {
+    guard let age = competitionAge else { return nil }
+    return [10, 12, 14, 16, 18, 19].contains(age)
   }
 
   // true for U11/U13 athletes who get reduced check-in fields
   var isYouthRestrictedCheckin: Bool {
-    guard let dob else { return false }
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-    guard let birthDate = formatter.date(from: dob) else { return false }
-    let calendar = Calendar.current
-    let month = calendar.component(.month, from: Date())
-    let year = calendar.component(.year, from: Date())
-    let cutoffYear = month >= 9 ? year + 1 : year
-    var components = DateComponents()
-    components.year = cutoffYear; components.month = 8; components.day = 31
-    guard let cutoff = calendar.date(from: components) else { return false }
-    let age = calendar.dateComponents([.year], from: birthDate, to: cutoff).year ?? 0
-    return age < 14
+    guard let age = competitionAge else { return false }
+    return age < 13
   }
 
   var hasTrainingMaxes: Bool {
