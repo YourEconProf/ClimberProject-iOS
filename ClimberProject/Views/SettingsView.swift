@@ -17,6 +17,7 @@ enum AppearanceMode: String, CaseIterable {
 
 struct SettingsView: View {
   @EnvironmentObject var authVM: AuthViewModel
+  @EnvironmentObject var unitContext: UnitContext
   @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
   @State private var timezoneError: String?
   @StateObject private var setTypeVM = SetTypeViewModel()
@@ -329,6 +330,21 @@ struct SettingsView: View {
           if let exerciseError {
             Text(exerciseError).foregroundColor(.red).font(.caption)
           }
+        }
+
+        // Units
+        Section("Units") {
+          Picker("Measurement units", selection: Binding(
+            get: { unitContext.system },
+            set: { newValue in
+              guard let coachId = authVM.currentCoach?.id else { return }
+              Task { await unitContext.setSystem(newValue, coachId: coachId) }
+            }
+          )) {
+            Text("Metric (cm, kg)").tag(UnitSystem.metric)
+            Text("Imperial (in, lb)").tag(UnitSystem.imperial)
+          }
+          .pickerStyle(.segmented)
         }
 
         // Appearance

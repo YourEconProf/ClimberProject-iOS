@@ -5,6 +5,7 @@ struct AddEvaluationView: View {
   let athleteId: String
   let coachId: String
   let mode: EvaluationAddMode
+  @EnvironmentObject var unitContext: UnitContext
   @Environment(\.dismiss) private var dismiss
 
   @State private var evaluatedAt = Date()
@@ -121,8 +122,9 @@ struct AddEvaluationView: View {
       .keyboardType(.decimalPad)
       .multilineTextAlignment(.trailing)
       .frame(width: 80)
-      if let unit = c.unit {
-        Text(unit)
+      let suffix = Units.unitSuffix(for: c, system: unitContext.system)
+      if !suffix.isEmpty {
+        Text(suffix)
           .foregroundColor(.secondary)
           .font(.caption)
           .frame(width: 30, alignment: .leading)
@@ -171,7 +173,7 @@ struct AddEvaluationView: View {
         } else if criteria?.isMaxRope == true, let idx = GradeScale.rope.firstIndex(of: text) {
           value = Double(idx)
         } else if let d = Double(text) {
-          value = d
+          value = criteria.map { Units.parseInput(d, criterion: $0, system: unitContext.system) } ?? d
         } else {
           return nil
         }
@@ -191,7 +193,7 @@ struct AddEvaluationView: View {
         } else if criteria?.isMaxRope == true, let idx = GradeScale.rope.firstIndex(of: entry.value) {
           value = Double(idx)
         } else if let d = Double(entry.value) {
-          value = d
+          value = criteria.map { Units.parseInput(d, criterion: $0, system: unitContext.system) } ?? d
         } else {
           return nil
         }
@@ -228,6 +230,7 @@ private struct CustomEntry: Identifiable {
 private struct CustomEntryRow: View {
   @Binding var entry: CustomEntry
   let allCriteria: [AssessmentCriteria]
+  @EnvironmentObject var unitContext: UnitContext
 
   private var selected: AssessmentCriteria? {
     allCriteria.first { $0.id == entry.criteriaId }
@@ -259,11 +262,14 @@ private struct CustomEntryRow: View {
           .keyboardType(.decimalPad)
           .multilineTextAlignment(.trailing)
           .frame(width: 70)
-        if let unit = selected?.unit {
-          Text(unit)
-            .foregroundColor(.secondary)
-            .font(.caption)
-            .frame(width: 30, alignment: .leading)
+        if let c = selected {
+          let suffix = Units.unitSuffix(for: c, system: unitContext.system)
+          if !suffix.isEmpty {
+            Text(suffix)
+              .foregroundColor(.secondary)
+              .font(.caption)
+              .frame(width: 30, alignment: .leading)
+          }
         }
       }
     }

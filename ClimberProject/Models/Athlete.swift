@@ -27,6 +27,7 @@ struct Athlete: Codable, Identifiable {
   let heightCm: Double?
   let weightKg: Double?
   let wingspanCm: Double?
+  let reachCm: Double?
   let dominantHand: String?      // left | right
   let gripPreference: String?    // open | half_crimp | full_crimp
   let fullCrimpReady: Bool?
@@ -57,6 +58,7 @@ struct Athlete: Codable, Identifiable {
     case heightCm = "height_cm"
     case weightKg = "weight_kg"
     case wingspanCm = "wingspan_cm"
+    case reachCm = "reach_cm"
     case dominantHand = "dominant_hand"
     case gripPreference = "grip_preference"
     case fullCrimpReady = "full_crimp_ready"
@@ -124,7 +126,7 @@ struct Athlete: Codable, Identifiable {
   }
 
   var hasPhysicalData: Bool {
-    heightCm != nil || weightKg != nil || wingspanCm != nil ||
+    heightCm != nil || weightKg != nil || wingspanCm != nil || reachCm != nil ||
     dominantHand != nil || gripPreference != nil ||
     fullCrimpReady == true || campusReady == true
   }

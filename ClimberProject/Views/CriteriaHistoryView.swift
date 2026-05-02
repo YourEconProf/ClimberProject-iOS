@@ -3,6 +3,7 @@ import SwiftUI
 struct CriteriaHistoryView: View {
   let criteria: AssessmentCriteria
   @ObservedObject var vm: EvaluationViewModel
+  @EnvironmentObject var unitContext: UnitContext
 
   var history: [Evaluation] { vm.history(for: criteria.id) }
 
@@ -34,10 +35,12 @@ struct CriteriaHistoryView: View {
     guard let value else { return "—" }
     if criteria.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
     if criteria.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
-    let formatted = value.truncatingRemainder(dividingBy: 1) == 0
-      ? String(format: "%.0f", value)
-      : String(format: "%.1f", value)
-    if let unit = criteria.unit { return "\(formatted) \(unit)" }
+    let displayed = Units.displayValue(value, criterion: criteria, system: unitContext.system)
+    let formatted = displayed.truncatingRemainder(dividingBy: 1) == 0
+      ? String(format: "%.0f", displayed)
+      : String(format: "%.1f", displayed)
+    let suffix = Units.unitSuffix(for: criteria, system: unitContext.system)
+    if !suffix.isEmpty { return "\(formatted) \(suffix)" }
     return formatted
   }
 }

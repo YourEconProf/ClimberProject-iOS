@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 
 struct EvaluationHistoryView: View {
+  @EnvironmentObject var unitContext: UnitContext
   let athlete: Athlete
   @ObservedObject var vm: EvaluationViewModel
 
@@ -76,16 +77,16 @@ struct EvaluationHistoryView: View {
           Chart(chartData) { evaluation in
             LineMark(
               x: .value("Date", evaluation.evaluatedAt.displayDateShort),
-              y: .value(criteria.name, evaluation.value ?? 0)
+              y: .value(criteria.name, chartY(evaluation.value, criteria: criteria))
             )
             .interpolationMethod(.catmullRom)
             PointMark(
               x: .value("Date", evaluation.evaluatedAt.displayDateShort),
-              y: .value(criteria.name, evaluation.value ?? 0)
+              y: .value(criteria.name, chartY(evaluation.value, criteria: criteria))
             )
           }
           .frame(height: 160)
-          .chartYAxisLabel(criteria.unit ?? "")
+          .chartYAxisLabel(Units.unitSuffix(for: criteria, system: unitContext.system))
           .padding(.vertical, 8)
         }
       }
@@ -162,14 +163,21 @@ struct EvaluationHistoryView: View {
     return formatValue(best.value, criteria: criteria)
   }
 
+  private func chartY(_ value: Double?, criteria: AssessmentCriteria) -> Double {
+    guard let value else { return 0 }
+    return Units.displayValue(value, criterion: criteria, system: unitContext.system)
+  }
+
   private func formatValue(_ value: Double?, criteria: AssessmentCriteria) -> String {
     guard let value else { return "—" }
     if criteria.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
     if criteria.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
-    let formatted = value.truncatingRemainder(dividingBy: 1) == 0
-      ? String(format: "%.0f", value)
-      : String(format: "%.1f", value)
-    if let unit = criteria.unit { return "\(formatted) \(unit)" }
+    let displayed = Units.displayValue(value, criterion: criteria, system: unitContext.system)
+    let formatted = displayed.truncatingRemainder(dividingBy: 1) == 0
+      ? String(format: "%.0f", displayed)
+      : String(format: "%.1f", displayed)
+    let suffix = Units.unitSuffix(for: criteria, system: unitContext.system)
+    if !suffix.isEmpty { return "\(formatted) \(suffix)" }
     return formatted
   }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 struct AthleteDetailView: View {
   let athlete: Athlete
   @EnvironmentObject var authVM: AuthViewModel
+  @EnvironmentObject var unitContext: UnitContext
   @StateObject private var noteVM = NoteViewModel()
   @StateObject private var evalVM = EvaluationViewModel()
   @StateObject private var goalVM = GoalViewModel()
@@ -245,14 +246,17 @@ struct AthleteDetailView: View {
       // Physical
       if athlete.hasPhysicalData {
         Section("Physical") {
-          if let h = athlete.heightCm {
-            LabeledContent("Height", value: "\(formatDecimal(h)) cm")
+          if athlete.heightCm != nil {
+            LabeledContent("Height", value: Units.formatLength(athlete.heightCm, system: unitContext.system))
           }
-          if let w = athlete.weightKg {
-            LabeledContent("Weight", value: "\(formatDecimal(w)) kg")
+          if athlete.weightKg != nil {
+            LabeledContent("Weight", value: Units.formatWeight(athlete.weightKg, system: unitContext.system))
           }
-          if let ws = athlete.wingspanCm {
-            LabeledContent("Wingspan", value: "\(formatDecimal(ws)) cm")
+          if athlete.wingspanCm != nil {
+            LabeledContent("Wingspan", value: Units.formatLength(athlete.wingspanCm, system: unitContext.system))
+          }
+          if athlete.reachCm != nil {
+            LabeledContent("Reach", value: Units.formatLength(athlete.reachCm, system: unitContext.system))
           }
           if let hand = athlete.dominantHand {
             LabeledContent("Dominant Hand", value: hand.capitalized)

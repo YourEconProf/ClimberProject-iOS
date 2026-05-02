@@ -8,6 +8,7 @@ enum EvaluationAddMode: Identifiable {
 struct AthleteEvaluationsView: View {
   let athlete: Athlete
   @EnvironmentObject var authVM: AuthViewModel
+  @EnvironmentObject var unitContext: UnitContext
   @StateObject private var vm = EvaluationViewModel()
   @State private var addMode: EvaluationAddMode?
   @State private var showTable = false
@@ -167,10 +168,14 @@ struct AthleteEvaluationsView: View {
       if c.isMaxBoulder, let label = GradeScale.label(for: value, type: "boulder") { return label }
       if c.isMaxRope,    let label = GradeScale.label(for: value, type: "rope")    { return label }
     }
-    let s = value.truncatingRemainder(dividingBy: 1) == 0
-      ? String(format: "%.0f", value)
-      : String(format: "%.1f", value)
-    if let u = criteria?.unit { return "\(s) \(u)" }
+    let displayed = criteria.map { Units.displayValue(value, criterion: $0, system: unitContext.system) } ?? value
+    let s = displayed.truncatingRemainder(dividingBy: 1) == 0
+      ? String(format: "%.0f", displayed)
+      : String(format: "%.1f", displayed)
+    if let c = criteria {
+      let suffix = Units.unitSuffix(for: c, system: unitContext.system)
+      if !suffix.isEmpty { return "\(s) \(suffix)" }
+    }
     return s
   }
 }

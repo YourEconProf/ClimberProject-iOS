@@ -40,6 +40,7 @@ struct AssessmentCriteria: Codable, Identifiable {
   let isHeight: Bool
   let isWeight: Bool
   let isWingspan: Bool
+  let isReach: Bool
   let createdAt: String
 
   enum CodingKeys: String, CodingKey {
@@ -59,6 +60,7 @@ struct AssessmentCriteria: Codable, Identifiable {
     case isHeight = "is_height"
     case isWeight = "is_weight"
     case isWingspan = "is_wingspan"
+    case isReach = "is_reach"
     case createdAt = "created_at"
   }
 
@@ -80,6 +82,7 @@ struct AssessmentCriteria: Codable, Identifiable {
     isHeight        = try c.decodeIfPresent(Bool.self,   forKey: .isHeight)        ?? false
     isWeight        = try c.decodeIfPresent(Bool.self,   forKey: .isWeight)        ?? false
     isWingspan      = try c.decodeIfPresent(Bool.self,   forKey: .isWingspan)      ?? false
+    isReach         = try c.decodeIfPresent(Bool.self,   forKey: .isReach)         ?? false
     createdAt       = try c.decode(String.self,          forKey: .createdAt)
   }
 }
