@@ -1,7 +1,7 @@
 # iOS Consolidated Implementation Plan
 
 **Date:** 2026-05-01
-**Last updated:** 2026-05-01 — moved age category, gym timezone, and date formatting into §0 (shipped in `11d66c0`).
+**Last updated:** 2026-05-01 — moved unit preference + reach into §0 (shipped in `4152e50`).
 **Scope:** Single plan combining `ios-parity-plan.md`, `ios-feature-spec-2026-04-28.md`, `changes-2026-04-30.md`, `ios-2026-05-01.md`, `age-category-rule.md`, plus the metric/imperial + reach work shipped in web commit `6880ba4`.
 
 This plan deduplicates the source design docs and reflects the current state of the iOS codebase. Items already shipped are listed in §0; the work remaining is in §1 onward, ordered by priority.
@@ -30,149 +30,12 @@ These were specified across the source docs and have landed in iOS:
 - **Gym timezone plumbing** — `Gym.timezone` decoded (defaults to `"UTC"`); `AuthViewModel.currentGym` and `gymTimezone` exposed; `loadGym()` runs after `loadCoach()`. Settings has an admin-only `TimeZone` picker over `TimeZone.knownTimeZoneIdentifiers` with optimistic `updateGymTimezone(_:)`.
 - **Date formatting convention** — `String+Date.swift` split into two rule sets. `displayDate` etc. format `date` columns in UTC. New `displayDate(in:)` / `displayDateTime(in:)` / `displayTime(in:)` format `timestamptz` instants in the gym's IANA timezone. Sweep covers: `AthleteDetailView` (note, assessment, maxesUpdatedAt), `AthleteAssessmentDetailView`, `AthleteNotesView`, `MentalFrameworkEditorView`, `ProgramEditorView`, `AthleteGoalsView`. Date columns (workout dates, eval dates, dob, competition dates, enrollment) left on UTC formatters.
 
----
-
-## 1. Unit preference (metric/imperial) + reach (HIGH)
-
-Source: web commit `6880ba4` (2026-05-01). Not covered by any of the source design docs but shipped to web. Storage stays metric throughout — conversion happens **only at the UI boundary**.
-
-### 1a. Schema additions (already migrated server-side)
-
-- `coaches.unit_preference text not null default 'metric' check (in 'metric','imperial')`
-- `athletes.reach_cm numeric`
-- `assessment_criteria.is_reach boolean not null default false`
-- A "Reach" criterion is auto-seeded for every gym (`unit = 'cm'`, `is_reach = true`)
-- Eval-sync trigger now branches on `is_reach` and writes to `athletes.reach_cm`
-
-### 1b. iOS models
-
-`Models/Coach.swift` — add `unitPreference: String` (default `"metric"`, decode missing as `"metric"`).
-
-`Models/Athlete.swift` — add `reachCm: Double?` (CodingKey `reach_cm`).
-
-`Models/Evaluation.swift` (criteria struct) — add `isReach: Bool` alongside the existing 9 flags.
-
-### 1c. Unit context
-
-New `Services/UnitSystem.swift` (or extend `AuthViewModel`):
-
-```swift
-enum UnitSystem: String { case metric, imperial }
-
-@MainActor
-final class UnitContext: ObservableObject {
-    @Published var system: UnitSystem = .metric
-
-    func setSystem(_ next: UnitSystem, coachId: String) async {
-        system = next
-        try? await SupabaseService.shared.supabase
-            .from("coaches")
-            .update(["unit_preference": next.rawValue])
-            .eq("id", value: coachId)
-            .execute()
-    }
-}
-```
-
-Inject as `@EnvironmentObject` in `ClimberProject_iOSApp`, hydrate from `coach.unitPreference` after `checkSession()`. Optimistic update — UI flips immediately, persistence is fire-and-forget.
-
-### 1d. Conversion helpers
-
-New `Services/Units.swift` mirroring the web `units.js`:
-
-```swift
-enum Units {
-    static let cmPerIn = 2.54
-    static let kgPerLb = 0.45359237
-
-    static func cmToIn(_ cm: Double) -> Double { cm / cmPerIn }
-    static func inToCm(_ inches: Double) -> Double { inches * cmPerIn }
-    static func kgToLb(_ kg: Double) -> Double { kg / kgPerLb }
-    static func lbToKg(_ lb: Double) -> Double { lb * kgPerLb }
-
-    static func formatLength(_ cm: Double?, system: UnitSystem) -> String {
-        guard let cm else { return "—" }
-        return system == .imperial
-            ? String(format: "%.1f in", cmToIn(cm))
-            : String(format: "%.1f cm", cm)
-    }
-
-    static func formatWeight(_ kg: Double?, system: UnitSystem) -> String {
-        guard let kg else { return "—" }
-        return system == .imperial
-            ? String(format: "%.1f lb", kgToLb(kg))
-            : String(format: "%.1f kg", kg)
-    }
-
-    static func isLengthCriterion(_ c: AssessmentCriteria) -> Bool {
-        c.isHeight || c.isWingspan || c.isReach
-    }
-    static func isWeightCriterion(_ c: AssessmentCriteria) -> Bool { c.isWeight }
-
-    /// Convert a stored metric value into the value to display in the input field.
-    static func displayValue(_ stored: Double, criterion: AssessmentCriteria, system: UnitSystem) -> Double {
-        guard system == .imperial else { return stored }
-        if isLengthCriterion(criterion) { return cmToIn(stored) }
-        if isWeightCriterion(criterion) { return kgToLb(stored) }
-        return stored
-    }
-
-    /// Convert an input-field value back to the metric value to persist.
-    static func parseInput(_ input: Double, criterion: AssessmentCriteria, system: UnitSystem) -> Double {
-        guard system == .imperial else { return input }
-        if isLengthCriterion(criterion) { return inToCm(input) }
-        if isWeightCriterion(criterion) { return lbToKg(input) }
-        return input
-    }
-
-    static func unitSuffix(for criterion: AssessmentCriteria, system: UnitSystem) -> String {
-        if system == .imperial {
-            if isLengthCriterion(criterion) { return "in" }
-            if isWeightCriterion(criterion) { return "lb" }
-        }
-        return criterion.unit ?? ""
-    }
-}
-```
-
-### 1e. Settings toggle
-
-`SettingsView` → add a "Units" section. Available to all coaches (per-coach preference, not gym-scoped).
-
-```swift
-Picker("Measurement units", selection: $unitContext.system) {
-    Text("Metric (cm, kg)").tag(UnitSystem.metric)
-    Text("Imperial (in, lb)").tag(UnitSystem.imperial)
-}
-.onChange(of: unitContext.system) { _, new in
-    Task { await unitContext.setSystem(new, coachId: authVM.coachId) }
-}
-```
-
-### 1f. Display + input call sites
-
-Touch every place a height / weight / wingspan / reach value is shown or entered:
-
-- **Athlete profile Physical card** (`AthleteDetailView`) — replace `"\(athlete.heightCm) cm"` style strings with `Units.formatLength(athlete.heightCm, system: unitContext.system)` etc. Add a new "Reach" row (only if `reachCm != nil`).
-- **Morpho evaluation entry** (`AddEvaluationView`) — for any criterion where `isHeight || isWeight || isWingspan || isReach`:
-  - Show `Units.unitSuffix(for:system:)` next to the input
-  - Convert keystroke input via `Units.parseInput(...)` before persisting (so storage stays cm/kg)
-  - When pre-filling an existing value, run it through `Units.displayValue(...)` first
-- **Evaluation history** (`CriteriaHistoryView`) — apply the same display conversion when rendering rows for length/weight criteria.
-
-Other criteria (max hang in kg, me-edge in mm, lockoff in seconds, etc.) keep their stored units regardless of preference. Only the four flagged length/weight criteria convert.
-
-### 1g. Reach criterion
-
-New "Reach" criterion is auto-seeded server-side. iOS work needed:
-
-1. Surface "Reach" in the Morpho evaluation form alongside Height / Weight / Wingspan.
-2. Show a "Reach" row in the Physical card on `AthleteDetailView` driven by `athlete.reachCm`.
-3. The denormalisation is handled by the eval-sync trigger; iOS just needs to read `reach_cm`.
+**Shipped 2026-05-01 (commit `4152e50`):**
+- **Unit preference (metric/imperial) + reach** — Storage stays metric. `Coach.unitPreference`, `Athlete.reachCm`, `AssessmentCriteria.isReach` added to models. New `Services/Units.swift` provides cm↔in / kg↔lb conversion plus `displayValue` / `parseInput` / `unitSuffix` helpers branching on the length flags (`isHeight`, `isWingspan`, `isReach`) and weight flag (`isWeight`). `UnitContext` ObservableObject hydrates from `coach.unitPreference` and patches the coaches row optimistically. Injected as `@EnvironmentObject` in app entry. Settings has a Units segmented picker. Sweep applied to: `AthleteDetailView` Physical card (with new Reach row), `AddEvaluationView` (input + suffix + parse), `CriteriaHistoryView`, `EvaluationHistoryView` (including chart Y axis), `AthleteEvaluationsView`. Other criteria (max hang, pull-up load, me-edge, lockoff) keep their stored units.
 
 ---
 
-## 2. Athlete-page alerts — also filter acknowledged (MEDIUM)
+## 1. Athlete-page alerts — also filter acknowledged (MEDIUM)
 
 The athlete profile must hide alerts that have been acknowledged but not yet resolved. The gym-wide dashboard keeps showing them.
 
@@ -191,7 +54,7 @@ The athlete profile must hide alerts that have been acknowledged but not yet res
 
 ---
 
-## 3. Gym-wide alert dashboard view (MEDIUM)
+## 2. Gym-wide alert dashboard view (MEDIUM)
 
 The `AlertDashboardViewModel` exists and works, but there is no surface that renders it. Add a dashboard view.
 
@@ -201,11 +64,11 @@ Each row: severity icon + alert type + athlete name (deep-link to `AthleteDetail
 
 ---
 
-## 4. Phase types (MEDIUM)
+## 3. Phase types (MEDIUM)
 
 `program_phases.phase_type` is a nullable text column constrained to nine values. iOS currently uses free-text `name`.
 
-### 4a. Model
+### 3a. Model
 
 `Models/ProgramPhase.swift` — add `phaseType: String?` and a Swift enum:
 
@@ -227,7 +90,7 @@ enum PhaseType: String, CaseIterable, Identifiable {
 }
 ```
 
-### 4b. Display
+### 3b. Display
 
 Wherever a phase name is rendered (program detail, current-phase chip on athlete cards, workout header):
 
@@ -241,17 +104,17 @@ A small chip/badge alongside the week-range label is the web pattern.
 
 `is_deload` stays the source of truth for the deload badge — independent of `phase_type`.
 
-### 4c. Phase creation
+### 3c. Phase creation
 
 `ProgramEditorView` Phases tab — replace the free-text name `TextField` with a `Picker(.menu)` over `PhaseType.allCases` (plus a "Select…" placeholder). On insert, set both `phase_type` and `name = type.label` for backward compatibility with older clients reading `name`.
 
-### 4d. Null handling
+### 3d. Null handling
 
 Phases created before this migration have `phase_type = null`; the fallback to `phase.name` handles them. Don't crash if `name` is also null — show "Phase \(startWeek)–\(endWeek)".
 
 ---
 
-## 5. AI note version history (LOW)
+## 4. AI note version history (LOW)
 
 New table `ai_note_versions` archives each AI note before replacement.
 
@@ -286,7 +149,7 @@ New table `ai_note_versions` archives each AI note before replacement.
 
 ---
 
-## 6. Background reassessment trigger (LOW)
+## 5. Background reassessment trigger (LOW)
 
 When (and only when) the app re-enters foreground or pulls to refresh, trigger `assess-athlete` (force=false) for an athlete if any of these were created **after** the last assessment's `assessed_at`:
 
@@ -302,7 +165,7 @@ The reassess call is already idempotent server-side (18-hour cache), so triggeri
 
 ---
 
-## 7. `tags.is_system` flag (LOW)
+## 6. `tags.is_system` flag (LOW)
 
 `tags` table gained `is_system boolean`. System tags have `gym_id IS NULL` and appear for all gyms read-only.
 
@@ -312,7 +175,7 @@ In tag-management UI (Settings or wherever tags are CRUD'd), hide the delete swi
 
 ---
 
-## 8. Inactive option in athletes program filter (LOW)
+## 7. Inactive option in athletes program filter (LOW)
 
 Source: web commit `88ce7ea`. The athlete list's program filter gained an "Inactive" option — athletes whose `athlete_programs` rows are all in the past (or who have no enrolment).
 
@@ -322,7 +185,7 @@ If the iOS list doesn't currently expose a program filter at all, this is a no-o
 
 ---
 
-## 9. Migrations to run (operational)
+## 8. Migrations to run (operational)
 
 ```sql
 -- Covered by web rollouts; idempotent if re-run:
@@ -339,13 +202,12 @@ No iOS-only migrations.
 
 ## Suggested sequencing
 
-1. **§1 unit preference + reach** — touches Coach/Athlete/Evaluation models, AddEvaluationView, AthleteDetailView, CriteriaHistoryView, SettingsView. Largest single piece of remaining work.
-2. **§2 athlete-page alert filter** — one-line query change.
-3. **§3 gym dashboard view** — UI-only; the VM already exists.
-4. **§4 phase types** — model + picker + display swap.
-5. **§5 AI note history** — when AthleteDetail has capacity.
-6. **§6 background reassessment** — quality-of-life, not parity-blocking.
-7. **§7 `tags.is_system`** — trivial; do whenever Tag model is next touched.
-8. **§8 inactive filter** — only if/when the program filter exists in iOS.
+1. **§1 athlete-page alert filter** — one-line query change.
+2. **§2 gym dashboard view** — UI-only; the VM already exists.
+3. **§3 phase types** — model + picker + display swap.
+4. **§4 AI note history** — when AthleteDetail has capacity.
+5. **§5 background reassessment** — quality-of-life, not parity-blocking.
+6. **§6 `tags.is_system`** — trivial; do whenever Tag model is next touched.
+7. **§7 inactive filter** — only if/when the program filter exists in iOS.
 
-Total estimated work: 1 day for §1, half-day for §2 + §3, 1 day for §4, half-day each for §5–§8.
+Total estimated work: half-day for §1 + §2, 1 day for §3, half-day each for §4–§7.
