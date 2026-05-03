@@ -54,6 +54,26 @@ class CompetitionViewModel: ObservableObject {
     }
   }
 
+  func updateNotes(id: String, notes: String?) async throws {
+    struct Patch: Encodable {
+      let notes: String?
+    }
+    try await supabase
+      .from("competition_results")
+      .update(Patch(notes: notes?.isEmpty == true ? nil : notes))
+      .eq("id", value: id)
+      .execute()
+    if let i = results.firstIndex(where: { $0.id == id }) {
+      let r = results[i]
+      results[i] = CompetitionResult(
+        id: r.id, athleteId: r.athleteId, coachId: r.coachId,
+        competitionDate: r.competitionDate, location: r.location,
+        ranking: r.ranking, notes: notes?.isEmpty == true ? nil : notes,
+        createdAt: r.createdAt
+      )
+    }
+  }
+
   func delete(id: String) async throws {
     try await supabase
       .from("competition_results")
