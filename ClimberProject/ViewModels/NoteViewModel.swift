@@ -46,13 +46,28 @@ class NoteViewModel: ObservableObject {
     notes.insert(created, at: 0)
   }
 
-  func deleteNote(id: String) async throws {
+  func updateNote(id: String, text: String, category: NoteCategory, isPrivate: Bool) async throws {
+    struct Patch: Encodable {
+      let note: String
+      let category: String
+      let isPrivate: Bool
+      enum CodingKeys: String, CodingKey {
+        case note
+        case category
+        case isPrivate = "is_private"
+      }
+    }
     try await supabase
       .from("notes")
-      .delete()
+      .update(Patch(note: text, category: category.rawValue, isPrivate: isPrivate))
       .eq("id", value: id)
       .execute()
-    notes.removeAll { $0.id == id }
+    if let i = notes.firstIndex(where: { $0.id == id }) {
+      let n = notes[i]
+      notes[i] = Note(id: n.id, athleteId: n.athleteId, coachId: n.coachId,
+                      note: text, category: category, isPrivate: isPrivate,
+                      createdAt: n.createdAt)
+    }
   }
 }
 

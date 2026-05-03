@@ -6,6 +6,7 @@ struct AthleteNotesView: View {
   @EnvironmentObject var authVM: AuthViewModel
   @State private var showingAdd = false
   @State private var selectedFilter: NoteCategory? = nil
+  @State private var editingNote: Note? = nil
 
   private var filteredNotes: [Note] {
     guard let filter = selectedFilter else { return vm.notes }
@@ -43,16 +44,19 @@ struct AthleteNotesView: View {
           .listRowBackground(Color.clear)
 
           ForEach(filteredNotes) { note in
-            NoteRow(note: note, currentCoach: authVM.currentCoach, gymTimezone: authVM.gymTimezone)
-              .swipeActions(edge: .trailing) {
-                if canDelete(note) {
-                  Button(role: .destructive) {
-                    Task { try? await vm.deleteNote(id: note.id) }
-                  } label: {
-                    Label("Delete", systemImage: "trash")
-                  }
+            HStack(alignment: .top) {
+              NoteRow(note: note, currentCoach: authVM.currentCoach, gymTimezone: authVM.gymTimezone)
+              if canEdit(note) {
+                Button {
+                  editingNote = note
+                } label: {
+                  Image(systemName: "pencil")
+                    .foregroundColor(.secondary)
                 }
+                .buttonStyle(.borderless)
+                .padding(.top, 2)
               }
+            }
           }
         }
         .overlay {
@@ -78,9 +82,12 @@ struct AthleteNotesView: View {
         coachId: authVM.currentCoach?.id ?? ""
       )
     }
+    .sheet(item: $editingNote) { note in
+      EditNoteView(note: note, vm: vm)
+    }
   }
 
-  private func canDelete(_ note: Note) -> Bool {
+  private func canEdit(_ note: Note) -> Bool {
     guard let coach = authVM.currentCoach else { return false }
     return note.coachId == coach.id || coach.isHeadCoachOrAdmin
   }
@@ -131,6 +138,78 @@ private struct NoteRow: View {
     case .goal: return .green
     case .injury: return .red
     case .general: return .secondary
+    }
+  }
+}
+
+private struct EditNoteView: View {
+  let note: Note
+  @ObservedObject var vm: NoteViewModel
+  @Environment(\.dismiss) private var dismiss
+
+  @State private var text: String
+  @State private var category: NoteCategory
+  @State private var isPrivate: Bool
+  @State private var isSaving = false
+  @State private var error: String?
+
+  init(note: Note, vm: NoteViewModel) {
+    self.note = note
+    self.vm = vm
+    _text = State(initialValue: note.note)
+    _category = State(initialValue: note.category)
+    _isPrivate = State(initialValue: note.isPrivate)
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          Picker("Category", selection: $category) {
+            ForEach(NoteCategory.allCases, id: \.self) { c in
+              Text(c.rawValue.capitalized).tag(c)
+            }
+          }
+          Toggle("Private", isOn: $isPrivate)
+        }
+        Section("Note") {
+          TextField("Note…", text: $text, axis: .vertical)
+            .lineLimit(4...10)
+        }
+        if let error {
+          Section {
+            Text(error).foregroundColor(.red).font(.caption)
+          }
+        }
+      }
+      .navigationTitle("Edit Note")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button(isSaving ? "Saving…" : "Save") { Task { await save() } }
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+        }
+      }
+    }
+  }
+
+  private func save() async {
+    isSaving = true
+    error = nil
+    defer { isSaving = false }
+    do {
+      try await vm.updateNote(
+        id: note.id,
+        text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+        category: category,
+        isPrivate: isPrivate
+      )
+      dismiss()
+    } catch {
+      self.error = error.localizedDescription
     }
   }
 }
