@@ -13,6 +13,7 @@ struct AthleteDetailView: View {
   @StateObject private var assessmentVM = AthleteAssessmentViewModel()
   @StateObject private var mentalVM = MentalFrameworkViewModel()
   @State private var showReassessConfirm = false
+  @Environment(\.scenePhase) private var scenePhase
 
 
   var fmCriteria: [AssessmentCriteria] {
@@ -334,6 +335,9 @@ struct AthleteDetailView: View {
         }
       }
     }
+    .refreshable {
+      await assessmentVM.refresh(athleteId: athlete.id)
+    }
     .navigationTitle(athlete.displayName)
     .navigationBarTitleDisplayMode(.inline)
     .confirmationDialog("Run AI Reassessment?", isPresented: $showReassessConfirm, titleVisibility: .visible) {
@@ -358,6 +362,11 @@ struct AthleteDetailView: View {
         group.addTask { await assessmentVM.fetchLatestAssessment(athleteId: athlete.id) }
         group.addTask { await assessmentVM.fetchAlerts(athleteId: athlete.id) }
         group.addTask { await mentalVM.fetchCurrent(athleteId: athlete.id) }
+      }
+    }
+    .onChange(of: scenePhase) { newPhase in
+      if newPhase == .active {
+        Task { await assessmentVM.refresh(athleteId: athlete.id) }
       }
     }
   }

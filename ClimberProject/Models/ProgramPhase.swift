@@ -1,5 +1,26 @@
 import Foundation
 
+enum PhaseType: String, CaseIterable, Identifiable {
+  case base, skills, strength, power
+  case powerEndurance = "power_endurance"
+  case competition, peak, transition, deload
+
+  var id: String { rawValue }
+  var label: String {
+    switch self {
+    case .base:          return "Base"
+    case .skills:        return "Skills"
+    case .strength:      return "Strength"
+    case .power:         return "Power"
+    case .powerEndurance: return "Power Endurance"
+    case .competition:   return "Competition"
+    case .peak:          return "Peak"
+    case .transition:    return "Transition"
+    case .deload:        return "Deload"
+    }
+  }
+}
+
 struct ProgramPhase: Codable, Identifiable {
   let id: String
   let programId: String
@@ -8,6 +29,7 @@ struct ProgramPhase: Codable, Identifiable {
   let endWeek: Int
   let isDeload: Bool
   let notes: String?
+  let phaseType: String?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -17,6 +39,12 @@ struct ProgramPhase: Codable, Identifiable {
     case endWeek = "end_week"
     case isDeload = "is_deload"
     case notes
+    case phaseType = "phase_type"
+  }
+
+  var displayLabel: String {
+    phaseType.flatMap { PhaseType(rawValue: $0)?.label }
+      ?? (name.isEmpty ? "Phase \(startWeek)–\(endWeek)" : name)
   }
 }
 

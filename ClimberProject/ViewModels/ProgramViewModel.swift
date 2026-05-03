@@ -210,24 +210,27 @@ class ProgramViewModel: ObservableObject {
     }
   }
 
-  func addPhase(programId: String, name: String, startWeek: Int, endWeek: Int, isDeload: Bool) async throws {
+  func addPhase(programId: String, phaseType: PhaseType?, startWeek: Int, endWeek: Int, isDeload: Bool) async throws {
     struct Insert: Encodable {
       let programId: String
       let name: String
       let startWeek: Int
       let endWeek: Int
       let isDeload: Bool
+      let phaseType: String?
       enum CodingKeys: String, CodingKey {
         case programId = "program_id"
         case name
         case startWeek = "start_week"
         case endWeek = "end_week"
         case isDeload = "is_deload"
+        case phaseType = "phase_type"
       }
     }
+    let name = phaseType?.label ?? "Phase \(startWeek)–\(endWeek)"
     let created: [ProgramPhase] = try await supabase
       .from("program_phases")
-      .insert(Insert(programId: programId, name: name, startWeek: startWeek, endWeek: endWeek, isDeload: isDeload))
+      .insert(Insert(programId: programId, name: name, startWeek: startWeek, endWeek: endWeek, isDeload: isDeload, phaseType: phaseType?.rawValue))
       .select()
       .execute()
       .value

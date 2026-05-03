@@ -84,7 +84,7 @@ class AthleteAssessmentViewModel: ObservableObject {
     alerts.removeAll { $0.id == alertId }
   }
 
-  func reassess(athleteId: String) async throws {
+  func reassess(athleteId: String, force: Bool = true, source: String = "manual") async throws {
     isReassessing = true
     defer { isReassessing = false }
 
@@ -97,7 +97,7 @@ class AthleteAssessmentViewModel: ObservableObject {
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONEncoder().encode(
-      ReassessRequest(athlete_id: athleteId, source: "manual", force: true)
+      ReassessRequest(athlete_id: athleteId, source: source, force: force)
     )
 
     let (_, response) = try await URLSession.shared.data(for: request)
@@ -107,6 +107,50 @@ class AthleteAssessmentViewModel: ObservableObject {
 
     await fetchLatestAssessment(athleteId: athleteId)
     await fetchAlerts(athleteId: athleteId)
+  }
+
+  func refresh(athleteId: String) async {
+    await fetchLatestAssessment(athleteId: athleteId)
+    await fetchAlerts(athleteId: athleteId)
+    guard let assessedAt = latestAssessment?.assessedAt else { return }
+    if (try? await hasNewerActivity(athleteId: athleteId, since: assessedAt)) == true {
+      try? await reassess(athleteId: athleteId, force: false, source: "auto")
+    }
+  }
+
+  private func hasNewerActivity(athleteId: String, since: String) async throws -> Bool {
+    struct Stub: Decodable { let id: String }
+
+    let notes: [Stub] = try await supabase
+      .from("notes")
+      .select("id")
+      .eq("athlete_id", value: athleteId)
+      .neq("category", value: "ai")
+      .gt("created_at", value: since)
+      .limit(1)
+      .execute()
+      .value
+    if !notes.isEmpty { return true }
+
+    let evals: [Stub] = try await supabase
+      .from("evaluations")
+      .select("id")
+      .eq("athlete_id", value: athleteId)
+      .gt("created_at", value: since)
+      .limit(1)
+      .execute()
+      .value
+    if !evals.isEmpty { return true }
+
+    let comps: [Stub] = try await supabase
+      .from("competition_results")
+      .select("id")
+      .eq("athlete_id", value: athleteId)
+      .gt("created_at", value: since)
+      .limit(1)
+      .execute()
+      .value
+    return !comps.isEmpty
   }
 
   var criticalAlerts: [AthleteAlert] { alerts.filter { $0.severity == "critical" } }

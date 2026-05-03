@@ -33,7 +33,7 @@ struct ProgramEditorView: View {
   @State private var planError: String?
 
   // Phases state
-  @State private var newPhaseName = ""
+  @State private var newPhaseType: PhaseType? = nil
   @State private var newPhaseStartWeek = 1
   @State private var newPhaseEndWeek = 4
   @State private var newPhaseIsDeload = false
@@ -255,8 +255,16 @@ struct ProgramEditorView: View {
           ForEach(vm.phases) { phase in
             VStack(alignment: .leading, spacing: 2) {
               HStack {
-                Text(phase.name).font(.subheadline)
+                Text(phase.displayLabel).font(.subheadline)
                 Spacer()
+                if let pt = phase.phaseType, let type = PhaseType(rawValue: pt) {
+                  Text(type.label)
+                    .font(.caption2).bold()
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.indigo.opacity(0.15))
+                    .foregroundColor(.indigo)
+                    .clipShape(Capsule())
+                }
                 if phase.isDeload {
                   Text("Deload")
                     .font(.caption2).bold()
@@ -283,14 +291,19 @@ struct ProgramEditorView: View {
       }
 
       Section("Add Phase") {
-        TextField("Phase name", text: $newPhaseName)
+        Picker("Phase Type", selection: $newPhaseType) {
+          Text("Select phase type…").tag(nil as PhaseType?)
+          ForEach(PhaseType.allCases) { type in
+            Text(type.label).tag(type as PhaseType?)
+          }
+        }
         Stepper("Start week: \(newPhaseStartWeek)", value: $newPhaseStartWeek, in: 1...52)
         Stepper("End week: \(newPhaseEndWeek)", value: $newPhaseEndWeek, in: 1...52)
         Toggle("Deload block", isOn: $newPhaseIsDeload)
         Button(isAddingPhase ? "Adding…" : "Add Phase") {
           Task { await addPhase() }
         }
-        .disabled(isAddingPhase || newPhaseName.trimmingCharacters(in: .whitespaces).isEmpty)
+        .disabled(isAddingPhase || newPhaseType == nil)
         if let phaseError {
           Text(phaseError).foregroundColor(.red).font(.caption)
         }
@@ -357,20 +370,19 @@ struct ProgramEditorView: View {
   }
 
   private func addPhase() async {
-    let name = newPhaseName.trimmingCharacters(in: .whitespaces)
-    guard !name.isEmpty else { return }
+    guard let phaseType = newPhaseType else { return }
     isAddingPhase = true
     phaseError = nil
     defer { isAddingPhase = false }
     do {
       try await vm.addPhase(
         programId: program.id,
-        name: name,
+        phaseType: phaseType,
         startWeek: newPhaseStartWeek,
         endWeek: newPhaseEndWeek,
         isDeload: newPhaseIsDeload
       )
-      newPhaseName = ""
+      newPhaseType = nil
       newPhaseStartWeek = 1
       newPhaseEndWeek = 4
       newPhaseIsDeload = false

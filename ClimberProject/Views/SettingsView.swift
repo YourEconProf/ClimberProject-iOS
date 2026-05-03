@@ -264,7 +264,16 @@ struct SettingsView: View {
         // Tags
         Section("Tags") {
           ForEach(tagVM.tags) { tag in
-            Text(tag.name)
+            HStack {
+              Text(tag.name)
+              Spacer()
+              if tag.isSystem {
+                Image(systemName: "lock")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+              }
+            }
+            .deleteDisabled(tag.isSystem)
           }
           .onDelete { indices in
             Task {

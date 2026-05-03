@@ -8,10 +8,9 @@ struct AthletesView: View {
   @State private var showingAddAthlete = false
 
   var filtered: [Athlete] {
-    if searchText.isEmpty { return vm.athletes }
-    return vm.athletes.filter {
-      $0.displayName.localizedCaseInsensitiveContains(searchText)
-    }
+    let active = vm.athletes.filter { $0.isActive }
+    if searchText.isEmpty { return active }
+    return active.filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
   }
 
   private func athlete(for alert: AthleteAlertWithAthlete) -> Athlete? {

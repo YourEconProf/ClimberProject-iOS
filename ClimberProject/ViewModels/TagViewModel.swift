@@ -15,7 +15,7 @@ class TagViewModel: ObservableObject {
       async let fetchedTags: [Tag] = supabase
         .from("tags")
         .select()
-        .eq("gym_id", value: gymId)
+        .or("gym_id.eq.\(gymId),is_system.eq.true")
         .order("name", ascending: true)
         .execute()
         .value
@@ -65,6 +65,7 @@ class TagViewModel: ObservableObject {
   }
 
   func deleteTag(id: String) async throws {
+    guard !(tags.first { $0.id == id }?.isSystem ?? false) else { return }
     try await supabase
       .from("tags")
       .delete()
