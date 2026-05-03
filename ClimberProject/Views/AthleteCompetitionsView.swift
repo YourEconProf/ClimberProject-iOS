@@ -10,21 +10,16 @@ struct AthleteCompetitionsView: View {
   var body: some View {
     List {
       ForEach(vm.results) { result in
-        CompetitionResultRow(result: result)
-          .swipeActions(edge: .leading) {
-            Button {
-              editingResult = result
-            } label: {
-              Label("Edit Notes", systemImage: "pencil")
-            }
-            .tint(.blue)
+        HStack {
+          CompetitionResultRow(result: result)
+          Spacer()
+          Button {
+            editingResult = result
+          } label: {
+            Image(systemName: "pencil")
+              .foregroundColor(.secondary)
           }
-      }
-      .onDelete { indices in
-        Task {
-          for i in indices {
-            try? await vm.delete(id: vm.results[i].id)
-          }
+          .buttonStyle(.borderless)
         }
       }
     }
