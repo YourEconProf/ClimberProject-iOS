@@ -185,8 +185,9 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
               HStack {
                 Text(c.name).font(.subheadline)
-                if let unit = c.unit {
-                  Text(unit)
+                let suffix = Units.unitSuffix(for: c, system: unitContext.system)
+                if !suffix.isEmpty {
+                  Text(suffix)
                     .font(.caption2)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.secondary.opacity(0.15))
